@@ -13,7 +13,7 @@ import { Utils } from '../utils/utils.js';
 //       }
 //     }
 //   },
-//   dtek: { 
+//   dtek: {
 //     select:    { group, dsoId, regionId },
 //     byDso: {
 //       [dsoId]: {

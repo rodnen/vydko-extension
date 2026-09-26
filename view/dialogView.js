@@ -113,7 +113,7 @@ export class DialogView {
     if (this.#closeButton) return;
 
     this.#closeButton = this.#createElement('button', 'btn app-btn g-6 flex-center glass-panel close-btn');
-    this.#closeButton.innerHTML = `<div class="btn-icon ic_cross"></div>`
+    this.#closeButton.innerHTML = `<div class="icon ic_cross"></div>`
     this.#closeButton.addEventListener('click', () => this.closeDialog());
 
     this.#title.after(this.#closeButton);
@@ -151,7 +151,7 @@ export class DialogView {
 
   #buildFooterInfo(infoData) {
     const container = this.#createElement('div', 'btn app-btn g-6 flex-center glass-panel');
-    const icon = this.#createElement('div', 'btn-icon ic_info');
+    const icon = this.#createElement('div', 'icon ic_info');
 
     container.dataset.action = infoData.action || '';
     if (infoData.title) icon.title = infoData.title;

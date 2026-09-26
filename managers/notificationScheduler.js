@@ -137,10 +137,10 @@ export class NotificationScheduler {
 
   static #fireNotification(eventTimestamp, actualMinutesLeft) {
     const title = actualMinutesLeft > 0
-      ? `Світло вимкнуть через ${actualMinutesLeft} хв`
-      : 'Світло вимикають зараз';
+      ? chrome.i18n.getMessage('notificationOutageSoonTitle', String(actualMinutesLeft))
+      : chrome.i18n.getMessage('notificationOutageNowTitle');
 
-    const time = new Date(eventTimestamp).toLocaleTimeString('uk-UA', {
+    const time = new Date(eventTimestamp).toLocaleTimeString(chrome.i18n.getUILanguage(), {
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -149,7 +149,7 @@ export class NotificationScheduler {
       type: 'basic',
       iconUrl: 'icons/icon128.png',
       title,
-      message: `Час відключення: ${time}`,
+      message: chrome.i18n.getMessage('notificationOutageTime', time),
       priority: 1
     });
   }

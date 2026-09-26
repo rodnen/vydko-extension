@@ -18,8 +18,9 @@ export class DialogManager {
   #view;
   #messageManager;
 
-  constructor(dom, messageManager) {
+  constructor(dom, messageManager, i18n) {
     this.#messageManager = messageManager;
+    this.i18n = i18n;
     this.onCheckUpdate = null;
 
     this.#view = new DialogView(dom);
@@ -28,14 +29,18 @@ export class DialogManager {
     });
   }
 
-  updateVersionState({ css, text }) {
+  updateVersionState({ css, icon, text }) {
     const el = this.#view.query('#versionState');
     if (!el) return;
 
-    el.className = `t11_px flex-center flex version-state ${css}`;
-    el.textContent = text;
-  }
+    const iconEl = el.querySelector('.icon');
+    const textEl = el.querySelector('.version-state-text');
+    if (!iconEl || !textEl) return;
 
+    el.className = `t11_px flex-center g-5 flex version-state ${css}`;
+    iconEl.className = `icon small ${icon}`;
+    textEl.textContent = text;
+  }
   // ---------------------------------------------------------------------
   // Проксі до візуального шару (щоб не ламати зовнішній API класу)
   // ---------------------------------------------------------------------
@@ -102,9 +107,9 @@ export class DialogManager {
         const success = await Utils.copyStaticText(actionEl.dataset.address);
 
         if (success) {
-          this.#toast('Успішно скопійовано', 'success', 'ic_check', 3000);
+          this.#toast(this.i18n.get('dialogCopySuccess'), 'success', 'ic_check', 3000);
         } else {
-          this.#toast('Не вдалося скопіювати', 'error', 'ic_error', 3000);
+          this.#toast(this.i18n.get('dialogCopyFailure'), 'error', 'ic_error', 3000);
         }
 
         break;
@@ -117,9 +122,9 @@ export class DialogManager {
     if (!success) return;
 
     const cache = await Utils.getStorageSize();
-    cacheBtn.querySelector('.cache-info').innerText = cache.formatted;
+    cacheBtn.querySelector('.cache-info').innerText = this.i18n.formatBytes(cache.bytes);
 
-    this.#toast(`Кеш очищено (${removed})`, 'success', 'ic_check', 2000);
+    this.#toast(`${this.i18n.get('dialogCacheCleared')} (${removed})`, 'success', 'ic_check', 2000);
   }
 
   // ---------------------------------------------------------------------
@@ -147,7 +152,7 @@ export class DialogManager {
       await action();
       return true;
     } catch (error) {
-      this.#toast(`${errorPrefix}: ${error.message || 'Спробуйте ще раз'}`, 'error', 'ic_error', 5000, true);
+      this.#toast(`${errorPrefix}: ${error.message || this.i18n.get('dialogTryAgain')}`, 'error', 'ic_error', 5000, true);
       console.error(errorPrefix, error);
 
       btn.disabled = false;
@@ -161,7 +166,7 @@ export class DialogManager {
   // ---------------------------------------------------------------------
 
   showAbout(info) {
-    this.#view.updateDialog('Про розширення', renderAbout(info), true);
+    this.#view.updateDialog(this.i18n.get('dialogAboutTitle'), renderAbout(info, this.i18n), true);
     this.#view.attachStepHandler((e) => this.#handleAboutClick(e, info));
     this.#view.showDialog();
   }
@@ -171,7 +176,13 @@ export class DialogManager {
   // ---------------------------------------------------------------------
 
   showPermissions({ hostPermissions, permissions }) {
-    this.#view.updateDialog('Дозволи', renderPermissions({ hostPermissions, permissions }), true, false, true);
+    this.#view.updateDialog(
+      this.i18n.get('dialogPermissionsTitle'),
+      renderPermissions({ hostPermissions, permissions }, this.i18n),
+      true,
+      false,
+      true
+    );
     this.#view.showDialog();
   }
 
@@ -180,7 +191,11 @@ export class DialogManager {
   // ---------------------------------------------------------------------
 
   showSupport() {
-    this.#view.updateDialog('Підтримка', renderSupport(CONSTANTS.OWNER), true);
+    this.#view.updateDialog(
+      this.i18n.get('dialogSupportTitle'),
+      renderSupport(CONSTANTS.OWNER, this.i18n),
+      true
+    );
     this.#view.attachStepHandler((e) => this.#handleSupportClick(e));
     this.#view.showDialog();
   }
@@ -192,11 +207,17 @@ export class DialogManager {
     const option = CONSTANTS.CRYPTO_OPTIONS[type];
 
     if (!option) {
-      console.warn(`Невідомий тип криптовалюти: ${type}`);
+      console.warn(`unknown crypto type: ${type}`);
       return;
     }
 
-    this.#view.updateDialog(option.title, renderCrypto(option.adress, option.qrcode), true, false, true);
+    this.#view.updateDialog(
+      this.i18n.get(`dialogCryptoTitle${type.toUpperCase()}`),
+      renderCrypto(option.adress, option.qrcode, this.i18n),
+      true,
+      false,
+      true
+    );
     this.#view.showDialog();
   }
 
@@ -219,62 +240,62 @@ export class DialogManager {
     const steps = [
       {
         fieldId: 'bug-message',
-        title: 'Опис проблеми',
-        hint: 'Опишіть, що сталося та за яких умов виникла помилка.',
-        placeholder: 'Наприклад: не відкривається налаштування при кліку на...',
+        title: 'dialogBugProblemTitle',
+        hint: 'dialogBugProblemHint',
+        placeholder: 'dialogBugProblemPlaceholder',
         validation: mkValidation({
-          requiredMsg: 'Опишіть проблему',
+          requiredMsg: this.i18n.get('dialogBugProblemRequired'),
           min: 10,
-          minMsg: 'Мінімум 10 символів',
+          minMsg: this.i18n.get('dialogBugMin10'),
           max: 500,
-          maxMsg: 'Занадто довге повідомлення'
+          maxMsg: this.i18n.get('dialogBugProblemTooLong')
         }),
 
         footer: {
           left: {
             action: 'cancel-bug',
-            text: 'Скасувати',
+            text: this.i18n.get('dialogCancel'),
             variant: 'cancel-btn',
-            title: 'Скасувати'
+            title: this.i18n.get('dialogCancel')
           },
 
           right: {
             action: 'forward-bug',
-            text: 'Далі',
+            text: this.i18n.get('dialogNext'),
             variant: 'forward-btn',
             icon: 'right',
-            title: 'Далі'
+            title: this.i18n.get('dialogNext')
           }
         }
       },
 
       {
         fieldId: 'bug-stack',
-        title: 'Кроки для відтворення',
-        hint: 'Опишіть послідовність дій, після яких виникає проблема.\nЧим точніше описані кроки, тим легше відтворити помилку.',
-        placeholder: '1. Відкрив сторінку X\n2. Натиснув кнопку Y\n3. З\'явилась помилка...',
+        title: 'dialogBugStepsTitle',
+        hint: 'dialogBugStepsHint',
+        placeholder: 'dialogBugStepsPlaceholder',
 
         validation: mkValidation({
-          requiredMsg: 'Опишіть кроки для відтворення',
+          requiredMsg: this.i18n.get('dialogBugStepsRequired'),
           min: 30,
-          minMsg: 'Мінімум 30 символів',
+          minMsg: this.i18n.get('dialogBugMin30'),
           max: 1000,
-          maxMsg: 'Занадто довгий опис дій'
+          maxMsg: this.i18n.get('dialogBugStepsTooLong')
         }),
 
         footer: {
           left: {
             action: 'back-bug',
-            text: 'Назад',
+            text: this.i18n.get('dialogBack'),
             variant: 'back-btn',
             icon: 'left',
-            title: 'Назад'
+            title: this.i18n.get('dialogBack')
           },
 
           right: {
             action: 'send-bug',
-            text: 'Надіслати',
-            title: 'Надіслати'
+            text: this.i18n.get('dialogSend'),
+            title: this.i18n.get('dialogSend')
           }
         }
       }
@@ -292,8 +313,8 @@ export class DialogManager {
       const step = steps[index];
       const { fieldId, footer, validation } = step
       this.#view.updateDialog(
-        'Повідомити про помилку',
-        renderBugReportStep(step),
+        this.i18n.get('dialogBugReportTitle'),
+        renderBugReportStep(step, this.i18n),
         true,
         true
       );
@@ -328,7 +349,7 @@ export class DialogManager {
 
         if (action === 'cancel-bug') {
           this.#view.closeDialog();
-          this.#toast('Відправку скасовано', 'info', 'ic_info', 2000);
+          this.#toast(this.i18n.get('dialogBugCancelled'), 'info', 'ic_info', 2000);
           return;
         }
 
@@ -369,19 +390,19 @@ export class DialogManager {
             timestamp: new Date().toISOString()
           };
 
-          const sendingToastId = this.#toast('Надсилання звіту...', 'info', null, 10000);
+          const sendingToastId = this.#toast(this.i18n.get('dialogBugSending'), 'info', null, 10000);
 
           const ok = await this.#runButtonAction(btn, {
-            loadingText: 'Надсилання...',
-            idleText: 'Надіслати',
-            errorPrefix: 'Помилка відправки звіту',
+            loadingText: this.i18n.get('dialogBugSending'),
+            idleText: this.i18n.get('dialogSend'),
+            errorPrefix: this.i18n.get('dialogBugSendError'),
             action: () => onSubmit?.(reportData)
           });
 
           this.#hideToast(sendingToastId);
 
           if (ok) {
-            this.#toast('Звіт успішно відправлено! Дякуємо', 'success', 'ic_check', 4000);
+            this.#toast(this.i18n.get('dialogBugSent'), 'success', 'ic_check', 4000);
             this.#view.closeDialog();
           } else {
             isSubmitting = false;
@@ -412,8 +433,8 @@ export class DialogManager {
     const enabled = currentSettings.enabled ?? false;
 
     const numberFields = [
-      { id: 'timer-delay', label: 'Нагадати за', span: 'до початку', min: 1, max: 180, value: currentSettings.delay ?? 30 },
-      { id: 'timer-frequency', label: 'Інтервал', span: 'між сповіщеннями', min: 1, max: 180, value: currentSettings.frequency ?? 15 }
+      { id: 'timer-delay', label: 'dialogTimerRemindBefore', span: 'dialogTimerUntilStart', min: 1, max: 180, value: currentSettings.delay ?? 30 },
+      { id: 'timer-frequency', label: 'dialogTimerInterval', span: 'dialogTimerBetweenNotifications', min: 1, max: 180, value: currentSettings.frequency ?? 15 }
     ];
 
     const initialDelay = currentSettings.delay ?? 30;
@@ -423,8 +444,8 @@ export class DialogManager {
     // ---- Рендер тіла та футера через темплейти ----
 
     this.#view.updateDialog(
-      'Налаштування сповіщень',
-      renderTimerSettings({ enabled, numberFields }),
+      this.i18n.get('dialogTimerTitle'),
+      renderTimerSettings({ enabled, numberFields }, this.i18n),
       true,
       true
     );
@@ -432,10 +453,19 @@ export class DialogManager {
     const footer = {
       info: {
         action: 'showInfo',
-        content: renderTimerSummary({ count: initialCount, delay: initialDelay, frequency: initialFrequency })
+        content: renderTimerSummary({ count: initialCount, delay: initialDelay, frequency: initialFrequency }, this.i18n)
       },
-      left: { action: 'cancel-timer', text: 'Скасувати', variant: 'cancel-btn', title: 'Скасувати' },
-      right: { action: 'save-timer', text: 'Зберегти', title: 'Зберегти' }
+      left: {
+        action: 'cancel-timer',
+        text: this.i18n.get('dialogCancel'),
+        variant: 'cancel-btn',
+        title: this.i18n.get('dialogCancel')
+      },
+      right: {
+        action: 'save-timer',
+        text: this.i18n.get('dialogSave'),
+        title: this.i18n.get('dialogSave')
+      }
     };
     this.#view.replaceFooter(this.#view.buildFooterButtons(footer));
     this.#view.showDialog();
@@ -457,8 +487,8 @@ export class DialogManager {
       const count = Math.max(1, Math.ceil(delay / freq)) + 1;
 
       summaryEl.querySelector('#summary-count').textContent = count;
-      summaryEl.querySelector('#summary-delay').textContent = `${delay} хв`;
-      summaryEl.querySelector('#summary-frequency').textContent = `${freq} хв`;
+      summaryEl.querySelector('#summary-delay').textContent = `${delay} ${this.i18n.get('dialogTimerMinutes')}`;
+      summaryEl.querySelector('#summary-frequency').textContent = `${freq} ${this.i18n.get('dialogTimerMinutes')}`;
     };
 
     const applyEnabledState = () => {
@@ -499,13 +529,18 @@ export class DialogManager {
         input.classList.remove('error');
 
         if (raw === '' || Number.isNaN(num) || !Number.isInteger(num)) {
-          this.#toast(`«${label}»: введіть ціле число`, 'error', 'ic_error', 2500);
+          const message = this.i18n.get('dialogTimerIntegerRequired').replace('{label}', this.i18n.get(label));
+          this.#toast(message, 'error', 'ic_error', 2500);
           input.classList.add('error');
           input.focus();
           return null;
         }
         if (num < min || num > max) {
-          this.#toast(`«${label}»: значення має бути від ${min} до ${max}`, 'error', 'ic_error', 2500);
+          const message = this.i18n.get('dialogTimerValueRange')
+            .replace('{label}', this.i18n.get(label))
+            .replace('{min}', min)
+            .replace('{max}', max);
+          this.#toast(message, 'error', 'ic_error', 2500);
           input.classList.add('error');
           input.focus();
           return null;
@@ -527,7 +562,7 @@ export class DialogManager {
 
       if (action === 'cancel-timer') {
         this.#view.closeDialog();
-        this.#toast('Зміни скасовано', 'info', 'ic_info', 2000);
+        this.#toast(this.i18n.get('dialogTimerCancelled'), 'info', 'ic_info', 2000);
         return;
       }
 
@@ -540,14 +575,14 @@ export class DialogManager {
         isSubmitting = true;
 
         const ok = await this.#runButtonAction(btn, {
-          loadingText: 'Збереження...',
-          idleText: 'Зберегти',
-          errorPrefix: 'Помилка збереження налаштувань',
+          loadingText: this.i18n.get('dialogTimerSaving'),
+          idleText: this.i18n.get('dialogSave'),
+          errorPrefix: this.i18n.get('dialogTimerSaveError'),
           action: () => onSave?.(settings)
         });
 
         if (ok) {
-          this.#toast('Налаштування сповіщень збережено', 'success', 'ic_check', 3000);
+          this.#toast(this.i18n.get('dialogTimerSaved'), 'success', 'ic_check', 3000);
           this.#view.closeDialog();
         } else {
           isSubmitting = false;

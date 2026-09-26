@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Видко",
-  "description": "Перевірка відключень світла за чергою",
-  "version": "1.3.1",
+  "name": "__MSG_extName__",
+  "description": "__MSG_extDescription__",
+  "default_locale": "uk",
+  "version": "1.3.3",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -16,12 +17,7 @@
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": [
-    "storage",
-    "alarms",
-    "notifications",
-    "clipboardWrite"
-  ],
+  "permissions": ["storage", "alarms", "notifications", "clipboardWrite"],
   "host_permissions": [
     "https://app.yasno.ua/*",
     "https://www.dtek-dnem.com.ua/*",
@@ -29,14 +25,9 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "icons/*",
-        "data/*"
-      ],
+      "resources": ["icons/*", "data/*"],
 
-      "matches": [
-        "<all_urls>"
-      ]
+      "matches": ["<all_urls>"]
     }
   ]
 }

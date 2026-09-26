@@ -6,7 +6,7 @@ export class DOMElements {
     this.header = document.querySelector('header');
     this.box = document.getElementById('content-box');
     this.footer = document.querySelector('footer');
-    
+
     this.controls = document.getElementById('controls');
     this.contentWrapper = document.getElementById('content-wrapper');
     this.queueSelect = document.querySelector('.queue-select');
@@ -14,19 +14,23 @@ export class DOMElements {
     this.versionContainer = document.getElementById('version');
 
     this.dateGroup = document.getElementById('date-group');
-    this.dotsBtn = document.querySelector('[data-action="openMenu"]');
-    this.popupMenu = document.querySelector('.popup-menu');
 
-    this.refreshBtn      = document.querySelector('button[data-action="refresh"]');
-    this.modeBtn         = this.popupMenu?.querySelector('button[data-action="mode"]');
-    this.themeBtn        = this.popupMenu?.querySelector('button[data-action="theme"]');
-    this.notificationBtn = this.popupMenu?.querySelector('button[data-action="notification"]');
-    this.aboutBtn        = this.popupMenu?.querySelector('button[data-action="about"]');
+    this.dotsBtn = document.querySelector('[data-action="openMenu"]');
+    this.mainPopupMenu = document.querySelector('#main-popup-menu');
+
+    this.refreshBtn = document.querySelector('button[data-action="refresh"]');
+    this.modeBtn = this.mainPopupMenu?.querySelector('[data-action="mode"]');
+    this.themeBtn = this.mainPopupMenu?.querySelector('[data-action="theme"]');
+    this.notificationBtn = this.mainPopupMenu?.querySelector('[data-action="notification"]');
+    this.aboutBtn = this.mainPopupMenu?.querySelector('[data-action="about"]');
+
+    this.languageBtn = document.querySelector('[data-action="openLanguage"]');
+    this.languagePopupMenu = document.querySelector('#language-popup-menu');
 
     this.dialogWrapper = document.getElementById('dialogWrapper');
-    this.dialog        = document.getElementById("dialog");
-    this.dialogHeader  = this.dialog?.querySelector(".dialog-header");
-    this.dialogTitle   = this.dialog?.querySelector('.dialog-title');
+    this.dialog = document.getElementById("dialog");
+    this.dialogHeader = this.dialog?.querySelector(".dialog-header");
+    this.dialogTitle = this.dialog?.querySelector('.dialog-title');
     this.dialogContent = this.dialog?.querySelector('.dialog-content');
 
     this.currentMode = document.getElementById('current-mode');

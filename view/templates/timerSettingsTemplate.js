@@ -1,9 +1,8 @@
-function renderNumberField({ id, label, span, min, max, value, enabled }) {
+function renderNumberField({ id, label, span, min, max, value, enabled }, i18n) {
   return `
     <div class="settings-item g-10 flex-col">
-      <label for="${id}">${label}</label>
-
-      <div class="number-input-wrapper glass-panel p-8">
+      <label for="${id}">${i18n.get(label)}</label>
+      <div class="flex-center number-input-wrapper glass-panel p-8">
         <input
           type="number"
           id="${id}"
@@ -13,67 +12,48 @@ function renderNumberField({ id, label, span, min, max, value, enabled }) {
           value="${value}"
           ${enabled ? '' : 'disabled'}
         />
-        <span class="number-input-suffix">хв</span>
+        <span class="number-input-suffix">${i18n.get('dialogTimerMinutes')}</span>
       </div>
-
-      <span class="secondary-text">${span}</span>
+      <span class="secondary-text">${i18n.get(span)}</span>
     </div>
   `;
 }
 
-export const renderTimerSettings = ({ enabled, numberFields }) => {
+export const renderTimerSettings = ({ enabled, numberFields }, i18n) => {
   const numberFieldsHTML = numberFields
-    .map((f) => renderNumberField({ ...f, enabled }))
+    .map(field => renderNumberField({ ...field, enabled }, i18n))
     .join('');
 
-  const html =  `<div class="settings-wrapper p-10 flex-col g-20">
+  return `<div class="settings-wrapper p-10 flex-col g-20">
       <div class="settings-section flex-col g-10">
-        <div class="settings-section-title secondary-text">
-          Сповіщення
-        </div>
-
+        <div class="settings-section-title secondary-text">${i18n.get('dialogTimerNotifications')}</div>
         <div class="settings-group p-10 glass-panel">
           <div class="settings-item flex-between">
-            <span>Сповіщення про відключення</span>
+            <span>${i18n.get('outageNotifications')}</span>
             <label class="custom-checkbox" for="notification-enabled">
               <input type="checkbox" id="notification-enabled" ${enabled ? 'checked' : ''} />
               <div class="slider round"></div>
             </label>
           </div>
         </div>
-
-        <div class="settings-section-description thirdly-text">
-          Отримуйте сповіщення про наближення
-          запланованого відключення.
-        </div>
+        <div class="settings-section-description thirdly-text">${i18n.get('dialogTimerNotificationsDescription')}</div>
       </div>
 
       <div class="settings-section flex-col g-10${enabled ? '' : ' disabled'}">
-        <div class="settings-section-title secondary-text">
-          Час сповіщень
-        </div>
-
+        <div class="settings-section-title secondary-text">${i18n.get('dialogTimerTimeTitle')}</div>
         <div class="notification-fields settings-group p-10 g-10 flex-row glass-panel" id="timer-settings-fields">
           ${numberFieldsHTML}
         </div>
-
-        <div class="settings-section-description thirdly-text">
-          Вкажіть, коли надсилати перше сповіщення
-          та як часто повторювати його до початку відключення.
-        </div>
+        <div class="settings-section-description thirdly-text">${i18n.get('dialogTimerTimeDescription')}</div>
       </div>
     </div>`;
+};
 
-    return html;
-}
-
-export const renderTimerSummary = ({ count, delay, frequency }) => {
-  const html =  `<div class="notification-summary glass-panel glass-blur p-10" id="notification-summary">
-      <span id="summary-count" class="summary-count-badge">${count}</span>
-      <strong class="summary-highlight">сповіщення</strong> буде надіслано.<br>
-      Перше — за <strong id="summary-delay" class="summary-highlight">${delay} хв</strong> до відключення,
-      наступні сповіщення будуть кожні <strong id="summary-frequency" class="summary-highlight">${frequency} хв</strong>.
-    </div>`;
-
-    return html;
-}
+export const renderTimerSummary = ({ count, delay, frequency }, i18n) => `
+  <div class="notification-summary glass-panel glass-blur p-10" id="notification-summary">
+    <span id="summary-count" class="summary-count-badge">${count}</span>
+    <strong class="summary-highlight">${i18n.get('dialogTimerNotificationCount')}</strong> ${i18n.get('dialogTimerWillBeSent')}<br>
+    ${i18n.get('dialogTimerFirstPrefix')} <strong id="summary-delay" class="summary-highlight">${delay} ${i18n.get('dialogTimerMinutes')}</strong> ${i18n.get('dialogTimerBeforeOutage')},
+    ${i18n.get('dialogTimerNextPrefix')} <strong id="summary-frequency" class="summary-highlight">${frequency} ${i18n.get('dialogTimerMinutes')}</strong>.
+  </div>
+`;

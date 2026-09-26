@@ -3,9 +3,10 @@ import { Utils } from '../utils/utils.js';
 import { getUpdateStateMeta } from '../utils/updateState.js';
 
 export class VersionManager {
-  constructor(dialogManager, messageManager) {
+  constructor(dialogManager, messageManager, i18n) {
     this.dialogManager = dialogManager;
     this.messageManager = messageManager;
+    this.i18n = i18n;
 
     this.init();
   }
@@ -22,6 +23,13 @@ export class VersionManager {
     return Math.max(0, until - Date.now());
   }
 
+  #t(key, values = {}) {
+    return Object.entries(values).reduce(
+      (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+      this.i18n.get(key)
+    );
+  }
+
   #showUpdateMessage(latestVer) {
     if (!latestVer) return;
 
@@ -29,7 +37,13 @@ export class VersionManager {
       id: 'update',
       type: 'info',
       icon: '🚀',
-      text: `Доступне оновлення: ${latestVer}`
+      textParts: [
+        {
+          text: this.i18n.get('versionAvailableMessage'),
+          i18nKey: 'versionAvailableMessage'
+        },
+        { text: String(latestVer) }
+      ]
     });
   }
 
@@ -86,7 +100,8 @@ export class VersionManager {
 
         this.dialogManager.updateVersionState({
           css: 'state-warning',
-          text: `Забагато запитів до GitHub. Спробуйте через ${mins} хв.`
+          icon: 'ic_warning',
+          text: this.#t('versionRateLimit', { minutes: mins })
         });
       }
 
@@ -107,9 +122,10 @@ export class VersionManager {
       if (showResult) {
         this.dialogManager.updateVersionState({
           css: 'state-error',
-          text:
-            `Помилка при перевірці оновлень: ` +
-            `${error.message || 'Спробуйте пізніше'}`
+          icon: 'ic_error',
+          text: this.#t('versionCheckErrorReason', {
+            reason: error.message || this.i18n.get('dialogTryAgain')
+          })
         });
       }
 
@@ -124,7 +140,8 @@ export class VersionManager {
       if (showResult) {
         this.dialogManager.updateVersionState({
           css: 'state-error',
-          text: 'Помилка при перевірці оновлень'
+          icon: 'ic_error',
+          text: this.i18n.get('versionCheckError')
         });
       }
 
@@ -147,9 +164,8 @@ export class VersionManager {
 
         this.dialogManager.updateVersionState({
           css: 'state-warning',
-          text:
-            `Забагато запитів до GitHub. ` +
-            `Спробуйте через ${mins} хв.`
+          icon: 'ic_warning',
+          text: this.#t('versionRateLimit', { minutes: mins })
         });
       }
 
@@ -162,9 +178,10 @@ export class VersionManager {
       if (showResult) {
         this.dialogManager.updateVersionState({
           css: 'state-error',
-          text:
-            `Помилка при перевірці оновлень: ` +
-            `${result.error || 'Спробуйте пізніше'}`
+          icon: 'ic_error',
+          text: this.#t('versionCheckErrorReason', {
+            reason: result.error || this.i18n.get('dialogTryAgain')
+          })
         });
       }
 
@@ -186,7 +203,7 @@ export class VersionManager {
     }
 
     if (showResult) {
-      const meta = getUpdateStateMeta(cmp, latestVer);
+      const meta = getUpdateStateMeta(cmp, latestVer, this.i18n);
       this.dialogManager.updateVersionState(meta);
     }
   }

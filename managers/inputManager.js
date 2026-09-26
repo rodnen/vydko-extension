@@ -2,7 +2,8 @@ import { CONSTANTS } from '../config/constants.js';
 import { Utils } from '../utils/utils.js';
 import { InputDropdownManager } from './inputDropdownManager.js';
 import { InputDataService } from '../services/inputDataService.js';
-import { MODE_KEY } from '../config/modes.js';
+
+const { getLabel } = Utils;
 
 // ============================================================================
 // Константи модуля
@@ -27,550 +28,571 @@ const KYIV_DSO_ID = '902';
 // асинхронні: input/blur-хендлери очікують відповідь мережі.
 // ============================================================================
 export class InputManager {
-    constructor(dom, cacheManager, onInputFinalSelect) {
-        this.dom = dom;
-        this.cache = cacheManager;
-        this.onInputFinalSelect = onInputFinalSelect;
+  constructor(dom, cacheManager, i18n, onInputFinalSelect) {
+    this.dom = dom;
+    this.cache = cacheManager;
+    this.i18n = i18n;
+    this.onInputFinalSelect = onInputFinalSelect;
 
-        this.inputsWrapper = null;
-        this.refreshTimeout = null;
-        this.retryAttempt = 0;
-        this.isRefreshing = false;
-        this.debounceTimer = null;
+    this.inputsWrapper = null;
+    this.refreshTimeout = null;
+    this.retryAttempt = 0;
+    this.isRefreshing = false;
+    this.debounceTimer = null;
 
-        this.inputMap = {
-            city: 'cityInput',
-            street: 'streetInput',
-            house: 'houseInput'
-        };
+    this.inputMap = {
+      city: 'cityInput',
+      street: 'streetInput',
+      house: 'houseInput'
+    };
 
-        this.dataService = null;
-        this.inputs = null;
-        this.renderedDsoId = null;
+    this.dataService = null;
+    this.inputs = null;
+    this.renderedDsoId = null;
 
-        this.dropdownManager = new InputDropdownManager(this.dom, this.inputMap);
+    this.dropdownManager = new InputDropdownManager(this.dom, this.inputMap);
 
-        this.state = { city: null, street: null, house: null };
-        this.searchTokens = { city: 0, street: 0, house: 0 };
+    this.state = { city: null, street: null, house: null };
+    this.searchTokens = { city: 0, street: 0, house: 0 };
 
-        this.handleOutsideClick = this.handleOutsideClick.bind(this);
+    this.handleOutsideClick = this.handleOutsideClick.bind(this);
+  }
+
+  async init() {
+    if (!this.dom.cityInput) return;
+    this.i18n.onLocaleChange(() => this.#updateNoOutageDate());
+    await this.#initDataService();
+
+    document.addEventListener('click', this.handleOutsideClick, true);
+
+    this.inputs.forEach(input => this.setupInput(input));
+    this.updateInputStates();
+    this.startRefreshTimer();
+  }
+
+  getValues() {
+    return {
+      city: this.state.city,
+      street: this.state.street,
+      house: this.state.house
+    };
+  }
+
+  closeAll() {
+    this.dropdownManager.closeAll();
+  }
+
+  // ------------------------------------------------------------------
+  // Ініціалізація dataService / конфігурації полів
+  // ------------------------------------------------------------------
+
+  // Створює dataService і конфіг інпутів (раніше тут ще й вантажився
+  // data/settlements.json — тепер дані завантажуються лениво, per-запит,
+  // всередині InputDataService).
+  async #initDataService() {
+    const modeKey = await Utils.getModeKey();
+    const { dsoId, regionId } = this.cache.getSelect(modeKey);
+
+    // Якщо режим і dsoId не змінились — dataService лишається той самий.
+    if (this.dataService && this.dataService.mode === modeKey && this.dataService.dsoId === dsoId) {
+      return;
     }
 
-    async init() {
-        if (!this.dom.cityInput) return;
-        await this.#initDataService();
+    this.cache.setActiveMode(modeKey);
+    this.cache.setActiveDsoId(dsoId);
 
-        document.addEventListener('click', this.handleOutsideClick, true);
+    this.dataService = new InputDataService(modeKey, dsoId, regionId, this.cache);
 
-        this.inputs.forEach(input => this.setupInput(input));
-        this.updateInputStates();
-        this.startRefreshTimer();
+    this.inputs = [
+      {
+        type: 'city',
+        key: 'cityInput',
+        cacheKey: 'city',
+        isInvalid: async (value) => !value || !(await this.dataService.isValidCity(value)),
+        onInvalid: () => this.clearCity()
+      },
+      {
+        type: 'street',
+        key: 'streetInput',
+        cacheKey: 'street',
+        isInvalid: async (value) => !value || !(await this.dataService.isValidStreet(this.state.city, value)),
+        onInvalid: () => this.clearStreet(),
+        dependsOn: 'city'
+      },
+      {
+        type: 'house',
+        key: 'houseInput',
+        cacheKey: 'house',
+        isInvalid: async () => false,
+        onInvalid: () => this.clearHouse(),
+        dependsOn: 'street'
+      }
+    ];
+  }
+
+  // Формат houseData відрізняється між режимами: DTEK віддає sub_type_reason
+  // (масив на кшталт ["GPV1.2"]), Yasno — окремі поля group/subgroup.
+  #extractGroup(houseData) {
+    if (this.dataService.mode === 'dtek') {
+      return houseData.sub_type_reason[0].replace('GPV', '');
+    }
+    return `${houseData.group}.${houseData.subgroup}`;
+  }
+
+  // ------------------------------------------------------------------
+  // Таймер періодичного оновлення house-даних
+  // ------------------------------------------------------------------
+
+  startRefreshTimer() {
+    this.stopRefreshTimer();
+    this.scheduleNextRefresh();
+  }
+
+  scheduleNextRefresh() {
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
     }
 
-    getValues() {
-        return {
-            city: this.state.city,
-            street: this.state.street,
-            house: this.state.house
-        };
+    const houseData = this.cache.getHouseData();
+    const updateTimestamp = houseData?.updateTimestamp;
+
+    let delay;
+
+    if (!updateTimestamp) {
+      const calculatedDelay = REFRESH_BASE_DELAY_MS * Math.pow(REFRESH_BACKOFF_MULTIPLIER, this.retryAttempt);
+      delay = Math.min(calculatedDelay, REFRESH_MAX_DELAY_MS);
+
+      this.retryAttempt++;
+    } else {
+      this.retryAttempt = 0;
+
+      const elapsed = Date.now() - updateTimestamp;
+      const remaining = CONSTANTS.CACHE_TTL.HOUSE_DATA - elapsed;
+      delay = Math.max(0, remaining);
     }
 
-    closeAll() {
-        this.dropdownManager.closeAll();
-    }
-
-    // ------------------------------------------------------------------
-    // Ініціалізація dataService / конфігурації полів
-    // ------------------------------------------------------------------
-
-    // Створює dataService і конфіг інпутів (раніше тут ще й вантажився
-    // data/settlements.json — тепер дані завантажуються лениво, per-запит,
-    // всередині InputDataService).
-    async #initDataService() {
-        const modeKey = await Utils.getModeKey();
-        const { dsoId, regionId } = this.cache.getSelect(modeKey);
-
-        // Якщо режим і dsoId не змінились — dataService лишається той самий.
-        if (this.dataService && this.dataService.mode === modeKey && this.dataService.dsoId === dsoId) {
-            return;
-        }
-
-        this.cache.setActiveMode(modeKey);
-        this.cache.setActiveDsoId(dsoId);
-
-        this.dataService = new InputDataService(modeKey, dsoId, regionId, this.cache);
-
-        this.inputs = [
-            {
-                type: 'city',
-                key: 'cityInput',
-                cacheKey: 'city',
-                validator: async (value) => !value || !(await this.dataService.isValidCity(value)),
-                onInvalid: () => this.clearCity()
-            },
-            {
-                type: 'street',
-                key: 'streetInput',
-                cacheKey: 'street',
-                validator: async (value) => !value || !(await this.dataService.isValidStreet(this.state.city, value)),
-                onInvalid: () => this.clearStreet(),
-                dependsOn: 'city'
-            },
-            {
-                type: 'house',
-                key: 'houseInput',
-                cacheKey: 'house',
-                validator: async () => false,
-                onInvalid: () => this.clearHouse(),
-                dependsOn: 'street'
-            }
-        ];
-    }
-
-    #getLabel(value) {
-        if (value == null) return '';
-        if (typeof value === 'string') return value;
-        return String(value.city ?? value.street ?? value.house ?? value.name ?? value.value ?? '');
-    }
-
-    // Формат houseData відрізняється між режимами: DTEK віддає sub_type_reason
-    // (масив на кшталт ["GPV1.2"]), Yasno — окремі поля group/subgroup.
-    #extractGroup(houseData) {
-        if (this.dataService.mode === 'dtek') {
-            return houseData.sub_type_reason[0].replace('GPV', '');
-        }
-        return `${houseData.group}.${houseData.subgroup}`;
-    }
-
-    // ------------------------------------------------------------------
-    // Таймер періодичного оновлення house-даних
-    // ------------------------------------------------------------------
-
-    startRefreshTimer() {
-        this.stopRefreshTimer();
+    this.refreshTimeout = setTimeout(async () => {
+      try {
+        await this.checkAndRefreshData();
+      } catch (error) {
+        console.error('[scheduleNextRefresh] Refresh failed:', error);
+      } finally {
         this.scheduleNextRefresh();
+      }
+    }, delay);
+  }
+
+  stopRefreshTimer() {
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+      this.refreshTimeout = null;
+    }
+  }
+
+  async checkAndRefreshData() {
+    if (this.isRefreshing) {
+      return;
     }
 
-    scheduleNextRefresh() {
-        if (this.refreshTimeout) {
-            clearTimeout(this.refreshTimeout);
-        }
-
-        const houseData = this.cache.getHouseData();
-        const updateTimestamp = houseData?.updateTimestamp;
-
-        let delay;
-
-        if (!updateTimestamp) {
-            const calculatedDelay = REFRESH_BASE_DELAY_MS * Math.pow(REFRESH_BACKOFF_MULTIPLIER, this.retryAttempt);
-            delay = Math.min(calculatedDelay, REFRESH_MAX_DELAY_MS);
-
-            this.retryAttempt++;
-        } else {
-            this.retryAttempt = 0;
-
-            const elapsed = Date.now() - updateTimestamp;
-            const remaining = CONSTANTS.CACHE_TTL.HOUSE_DATA - elapsed;
-            delay = Math.max(0, remaining);
-        }
-
-        this.refreshTimeout = setTimeout(async () => {
-            try {
-                await this.checkAndRefreshData();
-            } catch (error) {
-                console.error('[scheduleNextRefresh] Refresh failed:', error);
-            } finally {
-                this.scheduleNextRefresh();
-            }
-        }, delay);
+    if (!this.state.city || !this.state.street || !this.state.house) {
+      return;
     }
 
-    stopRefreshTimer() {
-        if (this.refreshTimeout) {
-            clearTimeout(this.refreshTimeout);
-            this.refreshTimeout = null;
+    this.isRefreshing = true;
+    try {
+      const cached = this.cache.getHouseData();
+      const updateTimestamp = cached?.updateTimestamp;
+
+      const needsRefresh = !updateTimestamp ||
+        (Date.now() - updateTimestamp >= CONSTANTS.CACHE_TTL.HOUSE_DATA);
+
+      if (needsRefresh) {
+        await this.refreshHouseData();
+
+        const newData = this.cache.getHouseData();
+        if (newData?.data) {
+          await this.showHouseData();
         }
+      }
+    } finally {
+      this.isRefreshing = false;
     }
+  }
 
-    async checkAndRefreshData() {
-        if (this.isRefreshing) {
-            return;
-        }
+  async refreshHouseData() {
+    try {
+      await this.dataService.loadHousesForStreet(
+        this.state.city,
+        this.state.street,
+        this.state.house
+      );
 
-        if (!this.state.city || !this.state.street || !this.state.house) {
-            return;
-        }
+      const houseData = await this.dataService.getHouseData(this.state.house);
 
-        this.isRefreshing = true;
-        try {
-            const cached = this.cache.getHouseData();
-            const updateTimestamp = cached?.updateTimestamp;
+      if (!houseData) {
+        return;
+      }
 
-            const needsRefresh = !updateTimestamp ||
-                (Date.now() - updateTimestamp >= CONSTANTS.CACHE_TTL.HOUSE_DATA);
+      const timestamp = this.dataService.getUpdateTimestamp();
+      this.cache.setHouseData(houseData, timestamp);
+      await this.showHouseData();
 
-            if (needsRefresh) {
-                await this.refreshHouseData();
-
-                const newData = this.cache.getHouseData();
-                if (newData?.data) {
-                    await this.showHouseData();
-                }
-            }
-        } finally {
-            this.isRefreshing = false;
-        }
+    } catch (error) {
+      console.error('[refreshHouseData] CRITICAL ERROR:', error);
+      throw error;
     }
+  }
 
-    async refreshHouseData() {
-        try {
-            await this.dataService.loadHousesForStreet(
-                this.state.city,
-                this.state.street,
-                this.state.house
-            );
+  // ------------------------------------------------------------------
+  // Обробники подій полів вводу
+  // ------------------------------------------------------------------
 
-            const houseData = await this.dataService.getHouseData(this.state.house);
-
-            if (!houseData) {
-                return;
-            }
-
-            const timestamp = this.dataService.getUpdateTimestamp();
-            this.cache.setHouseData(houseData, timestamp);
-            await this.showHouseData();
-
-        } catch (error) {
-            console.error('[refreshHouseData] CRITICAL ERROR:', error);
-            throw error;
-        }
+  handleOutsideClick(e) {
+    if (!this.inputsWrapper?.contains(e.target)) {
+      this.dropdownManager.closeAll();
     }
+  }
 
-    // ------------------------------------------------------------------
-    // Обробники подій полів вводу
-    // ------------------------------------------------------------------
+  setupInput({ type, key, isInvalid, onInvalid, dependsOn }) {
+    const input = this.dom[key];
+    if (!input || input.dataset.initialized) return;
+    input.dataset.initialized = 'true';
 
-    handleOutsideClick(e) {
-        if (!this.inputsWrapper?.contains(e.target)) {
-            this.dropdownManager.closeAll();
+    input.addEventListener('input', (e) => {
+      const value = e.target.value.trim();
+
+      clearTimeout(this.debounceTimer);
+
+      if (dependsOn && !this.state[dependsOn]) {
+        this.dropdownManager.remove(type);
+        return;
+      }
+
+      const token = ++this.searchTokens[type];
+
+      this.debounceTimer = setTimeout(async () => {
+        if (this.searchTokens[type] !== token) return;
+
+        if (value.length < MIN_SEARCH_LENGTH) {
+          this.dropdownManager.remove(type);
+          return;
         }
-    }
 
-    setupInput({ type, key, validator, onInvalid, dependsOn }) {
-        const input = this.dom[key];
-        if (!input || input.dataset.initialized) return;
-        input.dataset.initialized = 'true';
+        const matches = await this.dataService.search(type, value, this.state);
+        if (this.searchTokens[type] !== token) return;
 
-        input.addEventListener('input', (e) => {
-            const value = e.target.value.trim();
+        if (!matches.length) {
+          this.dropdownManager.remove(type);
+          return;
+        }
 
-            clearTimeout(this.debounceTimer);
-
-            if (dependsOn && !this.state[dependsOn]) {
-                this.dropdownManager.remove(type);
-                return;
-            }
-
-            const token = ++this.searchTokens[type];
-
-            this.debounceTimer = setTimeout(async () => {
-                if (this.state[type] !== null && await validator(value)) {
-                    if (this.searchTokens[type] !== token) return;
-                    this.state[type] = null;
-                    onInvalid?.();
-                    this.updateInputStates();
-                }
-
-                if (this.searchTokens[type] !== token) return;
-
-                if (value.length < MIN_SEARCH_LENGTH) {
-                    this.dropdownManager.remove(type);
-                    return;
-                }
-
-                const matches = await this.dataService.search(type, value, this.state);
-                if (this.searchTokens[type] !== token) return;
-
-                if (!matches.length) {
-                    this.dropdownManager.remove(type);
-                    return;
-                }
-
-                this.dropdownManager.render(type, matches, (t, option) => {
-                    this.selectOption(t, option);
-                    this.dropdownManager.remove(t);
-                });
-            }, INPUT_DEBOUNCE_DELAY_MS);
+        this.dropdownManager.render(type, matches, (t, option) => {
+          this.selectOption(t, option);
+          this.dropdownManager.remove(t);
         });
+      }, INPUT_DEBOUNCE_DELAY_MS);
+    });
 
-        if (type !== 'house') {
-            input.addEventListener('blur', async () => {
-                clearTimeout(this.debounceTimer);
+    if (type !== 'house') {
+      input.addEventListener('blur', async () => {
+        clearTimeout(this.debounceTimer);
 
-                const value = input.value.trim();
-                const token = ++this.searchTokens[type];
+        const value = input.value.trim();
+        if (this.state[type] !== null && value === getLabel(this.state[type])) return;
 
-                if (await validator(value)) {
-                    if (this.searchTokens[type] !== token) return;
-                    input.value = '';
-                    this.state[type] = null;
-                    onInvalid?.();
-                    this.updateInputStates();
-                }
-            });
+        const token = ++this.searchTokens[type];
+
+        if (await isInvalid(value)) {
+          if (this.searchTokens[type] !== token) return;
+          input.value = '';
+          this.state[type] = null;
+          onInvalid?.();
+          this.updateInputStates();
         }
+      });
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Робота зі значеннями полів
+  // ------------------------------------------------------------------
+
+  setInputValue(type, value) {
+    const config = this.inputs.find(i => i.type === type);
+    const input = this.dom[config.key];
+    if (!input) return;
+
+    input.value = getLabel(value);
+    this.state[type] = value || null;
+  }
+
+  async setAndSaveValue(type, value) {
+    const config = this.inputs.find(i => i.type === type);
+    if (!config) return;
+
+    this.setInputValue(type, value);
+    this.cache.setLocation({ [config.cacheKey]: value });
+    this.updateInputStates();
+  }
+
+  async selectOption(type, option) {
+    ++this.searchTokens[type];
+    await this.setAndSaveValue(type, option);
+
+    if (type === 'city') {
+      this.clearStreet();
     }
 
-    // ------------------------------------------------------------------
-    // Робота зі значеннями полів
-    // ------------------------------------------------------------------
-
-    setInputValue(type, value) {
-        const config = this.inputs.find(i => i.type === type);
-        const input = this.dom[config.key];
-        if (!input) return;
-
-        input.value = this.#getLabel(value);
-        this.state[type] = value || null;
+    if (type === 'street') {
+      this.clearHouse();
+      await this.dataService.loadHousesForStreet(this.state.city, option);
     }
 
-    async setAndSaveValue(type, value) {
-        const config = this.inputs.find(i => i.type === type);
-        if (!config) return;
+    if (type === 'house') {
+      const houseData = await this.dataService.getHouseData(option);
 
-        this.setInputValue(type, value);
-        this.cache.setLocation({ [config.cacheKey]: value });
-        this.updateInputStates();
+      if (!houseData) {
+        console.error('[selectOption] Не вдалося отримати дані по будинку');
+        return;
+      }
+
+      const timestamp = this.dataService.getUpdateTimestamp();
+      const group = this.#extractGroup(houseData);
+      const { group: selectedGroup } = this.cache.getSelect();
+
+      this.cache.setHouseData(houseData, timestamp);
+      this.cache.setLocation({ group });
+
+      if (group !== selectedGroup) await this.onInputFinalSelect(group);
+      await this.showHouseData();
+    }
+  }
+
+  // Завантажуємо збережені значення з in-memory кешу (без звернення до storage)
+  async loadSavedValues() {
+    const loc = this.cache.getLocation();
+
+    if (this.dataService.dsoId !== KYIV_DSO_ID) {
+      if (!loc.city || !(await this.dataService.isValidCity(loc.city))) return;
+      this.setInputValue('city', loc.city);
     }
 
-    async selectOption(type, option) {
-        await this.setAndSaveValue(type, option);
+    if (!loc.street || (!(await this.dataService.isValidStreet(loc.city, loc.street)) && this.dataService.dsoId !== KYIV_DSO_ID)) return;
+    this.setInputValue('street', loc.street);
+    await this.dataService.loadHousesForStreet(loc.city, loc.street, loc.house ?? null);
 
-        if (type === 'city') {
-            this.clearStreet();
-        }
+    if (!loc.house) return;
+    this.setInputValue('house', loc.house);
 
-        if (type === 'street') {
-            this.clearHouse();
-            await this.dataService.loadHousesForStreet(this.state.city, option);
-        }
-
-        if (type === 'house') {
-            const houseData = await this.dataService.getHouseData(option);
-
-            if (!houseData) {
-                console.error('[selectOption] Не вдалося отримати дані по будинку');
-                return;
-            }
-
-            const timestamp = this.dataService.getUpdateTimestamp();
-            const group = this.#extractGroup(houseData);
-            const { group: selectedGroup } = this.cache.getSelect();
-
-            this.cache.setHouseData(houseData, timestamp);
-            this.cache.setLocation({ group });
-
-            if (group !== selectedGroup) await this.onInputFinalSelect(group);
-            await this.showHouseData();
-        }
+    const { group: selectGroup } = this.cache.getSelect();
+    if (loc.group && loc.group !== selectGroup) {
+      await this.onInputFinalSelect(loc.group);
     }
 
-    // Завантажуємо збережені значення з in-memory кешу (без звернення до storage)
-    async loadSavedValues() {
-        const loc = this.cache.getLocation();
+    await this.showHouseData();
+    this.updateInputStates();
+  }
 
-        if (this.dataService.dsoId !== KYIV_DSO_ID) {
-            if (!loc.city || !(await this.dataService.isValidCity(loc.city))) return;
-            this.setInputValue('city', loc.city);
-        }
+  clearCity() {
+    this.clearField('city');
+    this.clearStreet();
+  }
 
-        if (!loc.street || (!(await this.dataService.isValidStreet(loc.city, loc.street)) && this.dataService.dsoId !== KYIV_DSO_ID)) return;
-        this.setInputValue('street', loc.street);
-        await this.dataService.loadHousesForStreet(loc.city, loc.street, loc.house ?? null);
+  clearStreet() {
+    this.clearField('street');
+    this.clearHouse();
+  }
 
-        if (!loc.house) return;
-        this.setInputValue('house', loc.house);
+  clearHouse() {
+    this.clearField('house');
+    this.dataService.clearHouses();
+  }
 
-        const { group: selectGroup } = this.cache.getSelect();
-        if (loc.group && loc.group !== selectGroup) {
-            await this.onInputFinalSelect(loc.group);
-        }
+  clearField(type) {
+    const config = this.inputs.find(i => i.type === type);
+    this.state[type] = null;
+    const input = this.dom[config.key];
+    if (input) input.value = '';
+    this.cache.setLocation({ [config.cacheKey]: '' });
+  }
 
-        await this.showHouseData();
-        this.updateInputStates();
+  updateInputStates() {
+    const extended = this.inputsWrapper?.dataset.extended === 'true';
+    const hasCity = this.state.city !== null;
+    const hasStreet = this.state.street !== null;
+    const isKyivLocked = String(this.dataService?.dsoId) === KYIV_DSO_ID;
+
+    if (this.dom.cityInput) {
+      this.dom.cityInput.disabled = isKyivLocked ? true : !extended;
     }
-
-    clearCity() {
-        this.clearField('city');
-        this.clearStreet();
+    if (this.dom.streetInput) {
+      this.dom.streetInput.disabled = !extended || !hasCity;
+      if (!hasCity) this.dom.streetInput.value = '';
     }
-
-    clearStreet() {
-        this.clearField('street');
-        this.clearHouse();
+    if (this.dom.houseInput) {
+      this.dom.houseInput.disabled = !extended || !hasStreet;
+      if (!hasStreet) this.dom.houseInput.value = '';
     }
+  }
 
-    clearHouse() {
-        this.clearField('house');
-        this.dataService.clearHouses();
-    }
+  // ------------------------------------------------------------------
+  // Рендер стану електропостачання
+  // ------------------------------------------------------------------
 
-    clearField(type) {
-        const config = this.inputs.find(i => i.type === type);
-        this.state[type] = null;
-        const input = this.dom[config.key];
-        if (input) input.value = '';
-        this.cache.setLocation({ [config.cacheKey]: '' });
-    }
-
-    updateInputStates() {
-        const extended = this.inputsWrapper?.dataset.extended === 'true';
-        const hasCity = this.state.city !== null;
-        const hasStreet = this.state.street !== null;
-        const isKyivLocked = String(this.dataService?.dsoId) === KYIV_DSO_ID;
-
-        if (this.dom.cityInput) {
-            this.dom.cityInput.disabled = isKyivLocked ? true : !extended;
-        }
-        if (this.dom.streetInput) {
-            this.dom.streetInput.disabled = !extended || !hasCity;
-            if (!hasCity) this.dom.streetInput.value = '';
-        }
-        if (this.dom.houseInput) {
-            this.dom.houseInput.disabled = !extended || !hasStreet;
-            if (!hasStreet) this.dom.houseInput.value = '';
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // Рендер стану електропостачання
-    // ------------------------------------------------------------------
-
-    #buildOutageHtml(data, updateTimestamp) {
-        const { sub_type, start_date, end_date } = data;
-        return `
+  #buildOutageHtml(data, updateTimestamp) {
+    const { sub_type, start_date, end_date } = data;
+    return `
         <div class="outage-card glass-blur p-8 z-5 popup">
             <div class="outage-body">
-            <p>Причина: <strong>${sub_type}</strong></p>
-            <p>Початок: <strong>${Utils.formatFullDateTime(start_date)}</strong></p>
-            <p>Відновлення: <strong>до ${Utils.formatFullDateTime(end_date)}</strong></p>
-            <p>Оновлено: <strong>${Utils.formatFullDate(new Date(updateTimestamp))}</strong></p>
+            <p><span data-i18n="outageReason">${this.i18n.get('outageReason')}: </span><strong>${sub_type}</strong></p>
+            <p><span data-i18n="outageStart">${this.i18n.get('outageStart')}: </span><strong>${this.i18n.formatFullDateTime(start_date)}</strong></p>
+            <p><span data-i18n="outageEnd">${this.i18n.get('outageEnd')}: </span><strong>${this.i18n.get('outageEndPrefix')} ${this.i18n.formatFullDateTime(end_date)}</strong></p>
+            <p><span data-i18n="outageUpdated">${this.i18n.get('outageUpdated')}: </span><strong>${this.i18n.formatFullDate(new Date(updateTimestamp))}</strong></p>
             </div>
         </div>
         `;
-    }
+  }
 
-    #buildNoOutageHtml(updateTimestamp) {
-        return `
-        <div class="outage-card glass-blur glass-panel p-8 z-5 popup info-mode">
-            <div class="outage-body info-text">
-            <p>Якщо зараз у вас відсутнє світло, імовірно виникла <strong>аварійна ситуація</strong>, або діють стабілізаційні чи екстрені відключення.</p>
-            <p>Просимо перевірити інформацію через <strong>15 хвилин</strong> (час на оновлення даних).</p>
-            <p>Оновлено: <strong>${Utils.formatFullDate(new Date(updateTimestamp))}</strong></p>
-            </div>
+  #buildNoOutageHtml(updateTimestamp) {
+    const updated = this.i18n.get('updated');
+    const html = `
+      <div class="outage-card glass-blur glass-panel p-8 z-5 popup info-mode">
+        <div class="outage-body info-text">
+          <p>
+            <span data-i18n="noPowerBefore">${this.i18n.get('noPowerBefore')}</span>
+            <strong><span data-i18n="noPowerEmphasis">${this.i18n.get('noPowerEmphasis')}</span></strong>
+            <span data-i18n="noPowerAfter">${this.i18n.get('noPowerAfter')}</span>
+          </p>
+          <p>
+            <span data-i18n="checkAgainBefore">${this.i18n.get('checkAgainBefore')}</span>
+            <strong><span data-i18n="checkAgainEmphasis">${this.i18n.get('checkAgainEmphasis')}</span></strong>
+            <span data-i18n="checkAgainAfter">${this.i18n.get('checkAgainAfter')}</span>
+          </p>
+          <p><span data-i18n="updated">${updated}</span> <strong data-outage-updated-date="${updateTimestamp}">${this.i18n.formatFullDate(new Date(updateTimestamp))}</strong></p>
         </div>
-        `;
+      </div>
+    `;
+    return html;
+  }
+
+  #updateNoOutageDate() {
+    const dateElement = this.dom.contentWrapper.querySelector('[data-outage-updated-date]');
+    if (!dateElement) return;
+
+    const timestamp = Number(dateElement.dataset.outageUpdatedDate);
+    if (!Number.isFinite(timestamp)) return;
+
+    dateElement.textContent = this.i18n.formatFullDate(new Date(timestamp));
+  }
+
+  async showHouseData() {
+    if (this.dataService.mode === 'yasno') return;
+
+    const cached = this.cache.getHouseData();
+    const data = cached?.data;
+    const updateTimestamp = cached?.updateTimestamp;
+
+    let container = this.dom.contentWrapper.querySelector('#content-header');
+
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'content-header';
+      container.classList.add('flex-col');
+      this.dom.contentWrapper.insertBefore(container, this.dom.contentWrapper.firstChild);
     }
 
-    async showHouseData() {
-        if (this.dataService.mode === 'yasno') return;
+    if (!data) {
+      container.innerHTML = `
+        <button id="toggle-outage-btn" data-i18n-title="inputLoadingTitle" class="glass-panel flex-center g-10" title="${this.i18n.get('inputLoadingTitle')}">
+          <div class="loader small"></div>
+          <span data-i18n="inputUpdatingData">${this.i18n.get('inputUpdatingData')}</span>
+        </button>`;
+      return;
+    }
 
-        const cached = this.cache.getHouseData();
-        const data = cached?.data;
-        const updateTimestamp = cached?.updateTimestamp;
+    const hasOutage = data.sub_type?.trim() !== '';
+    const outageHtml = hasOutage
+      ? this.#buildOutageHtml(data, updateTimestamp)
+      : this.#buildNoOutageHtml(updateTimestamp);
 
-        let container = this.dom.contentWrapper.querySelector('#content-header');
-
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'content-header';
-            container.classList.add('flex-col');
-            this.dom.contentWrapper.insertBefore(container, this.dom.contentWrapper.firstChild);
-        }
-
-        if (!data) {
-            container.innerHTML = `<button id="toggle-outage-btn" class="glass-panel flex-center g-10" title='Дані завантажуються'><div class="loader small"></div>Оновлення даних</button>`;
-            return;
-        }
-
-        const hasOutage = data.sub_type?.trim() !== '';
-        const outageHtml = hasOutage
-            ? this.#buildOutageHtml(data, updateTimestamp)
-            : this.#buildNoOutageHtml(updateTimestamp);
-
-        container.innerHTML = `
-        <button id="toggle-outage-btn" class="glass-panel flex-center g-10" title='Переглянути стан електропостачання'>${hasOutage ? "⚠️ За адресою відсутня електроенергія" : "Стан електропостачання"}</button>
+    container.innerHTML = `
+        <button id="toggle-outage-btn" class="glass-panel flex-center g-10 ${hasOutage ? 'outage-active' : ''}" data-i18n-title="inputViewOutageStatus" title="${this.i18n.get('inputViewOutageStatus')}">
+          ${hasOutage
+        ? `<span class="icon ic_warning"></span><span class="btn-text"><span data-i18n="inputPowerUnavailable">${this.i18n.get('inputPowerUnavailable')}</span></span>`
+        : `<span class="btn-text"><span data-i18n="inputPowerStatus">${this.i18n.get('inputPowerStatus')}</span></span>`
+      }
+        </button>
         ${outageHtml}
-        `;
+    `;
 
-        const button = container.querySelector('#toggle-outage-btn');
-        const popup = container.querySelector('.outage-card');
+    const button = container.querySelector('#toggle-outage-btn');
+    const popup = container.querySelector('.outage-card');
 
-        button.addEventListener('click', (e) => {
-            e.stopPropagation();
-            popup.classList.toggle('active');
-        });
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      popup.classList.toggle('active');
+    });
 
-        document.addEventListener('click', () => popup.classList.remove('active'));
-        popup.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => popup.classList.remove('active'));
+    popup.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  // ------------------------------------------------------------------
+  // Побудова/знищення DOM полів вводу
+  // ------------------------------------------------------------------
+
+  #buildClearButtonHtml(action) {
+    return `<button class="btn app-btn glass-panel flex-center small input-clear" data-action="${action}" data-i18n-title="inputClear" title="${this.i18n.get('inputClear')}"><div class="icon ic_cross"></div></button>`;
+  }
+
+  #bindClearButton(root, action, handler) {
+    const btn = root.querySelector(`[data-action="${action}"]`);
+    if (btn) {
+      btn.addEventListener('click', handler);
+    }
+  }
+
+  async renderInputs() {
+    await this.#initDataService();
+    const dsoId = this.dataService.dsoId;
+
+    if (this.inputsWrapper) {
+      this.removeInputs();
     }
 
-    // ------------------------------------------------------------------
-    // Побудова/знищення DOM полів вводу
-    // ------------------------------------------------------------------
+    this.renderedDsoId = dsoId;
 
-    #buildClearButtonHtml(action) {
-        return `<button class="btn app-btn glass-panel flex-center small input-clear" data-action="${action}" title="Очистити"><div class="icon ic_cross"></div></button>`;
-    }
+    const { extended } = await Utils.getStorageData(['extended']);
+    const isExtended = extended === true;
+    const disabled = isExtended ? '' : 'disabled';
 
-    #bindClearButton(root, action, handler) {
-        const btn = root.querySelector(`[data-action="${action}"]`);
-        if (btn) {
-            btn.addEventListener('click', handler);
-        }
-    }
+    const isKyivLocked = String(dsoId) === KYIV_DSO_ID;
+    const cityDisabled = isKyivLocked ? 'disabled' : disabled;
+    const cityValue = isKyivLocked ? 'м. Київ' : '';
+    const cityButtonHtml = isKyivLocked
+      ? ''
+      : this.#buildClearButtonHtml('clearCity');
 
-    async renderInputs() {
-        await this.#initDataService();
-        const dsoId = this.dataService.dsoId;
+    const titleVal = [this.i18n.get('inputExpand'), this.i18n.get('inputCollapse')];
 
-        if (this.inputsWrapper) {
-            this.removeInputs();
-        }
-
-        this.renderedDsoId = dsoId;
-
-        const { extended } = await Utils.getStorageData(['extended']);
-        const isExtended = extended === true;
-        const disabled = isExtended ? '' : 'disabled';
-
-        const isKyivLocked = String(dsoId) === KYIV_DSO_ID;
-        const cityDisabled = isKyivLocked ? 'disabled' : disabled;
-        const cityValue = isKyivLocked ? 'м. Київ' : '';
-        const cityButtonHtml = isKyivLocked
-            ? ''
-            : this.#buildClearButtonHtml('clearCity');
-
-        const titleVal = ['Розгорнути', 'Згорнути'];
-
-        const root = document.createElement('div');
-        root.className = 'location-root flex-col';
-        root.dataset.extended = String(extended ?? false);
-        root.innerHTML = `
+    const root = document.createElement('div');
+    root.className = 'location-root flex-col';
+    root.dataset.extended = String(extended ?? false);
+    root.innerHTML = `
         <div class="input-wrapper g-8">
             <div class="custom-input glass-panel">
                 <input id="city" class="city-input" value="${cityValue}" ${cityDisabled} placeholder=" " />
-                <label for="city" class="input-label">Населений пункт</label>
+                <label for="city" class="input-label" data-i18n="inputCity">${this.i18n.get('inputCity')}</label>
                 ${cityButtonHtml}
             </div>
             <div class="custom-input glass-panel">
                 <input id="street" class="street-input" ${disabled} placeholder=" " />
-                <label for="street" class="input-label">Вулиця</label>
+                <label for="street" class="input-label" data-i18n="inputStreet">${this.i18n.get('inputStreet')}</label>
                 ${this.#buildClearButtonHtml('clearStreet')}
             </div>
             <div class="custom-input glass-panel">
                 <input id="house" class="house-number-input" ${disabled} placeholder=" " />
-                <label for="house" class="input-label">Номер будинку</label>
+                <label for="house" class="input-label" data-i18n="inputHouseNumber">${this.i18n.get('inputHouseNumber')}</label>
                 ${this.#buildClearButtonHtml('clearHouse')}
             </div>
         </div>
@@ -579,59 +601,59 @@ export class InputManager {
         </button>
     `;
 
-        this.dom.controls.appendChild(root);
-        this.inputsWrapper = root;
+    this.dom.controls.appendChild(root);
+    this.inputsWrapper = root;
 
-        this.dom.cityInput = root.querySelector('#city');
-        this.dom.streetInput = root.querySelector('#street');
-        this.dom.houseInput = root.querySelector('#house');
-        this.dom.locationBtn = root.querySelector('.location-btn');
+    this.dom.cityInput = root.querySelector('#city');
+    this.dom.streetInput = root.querySelector('#street');
+    this.dom.houseInput = root.querySelector('#house');
+    this.dom.locationBtn = root.querySelector('.location-btn');
 
-        if (isKyivLocked) {
-            this.state.city = 'м. Київ';
-        }
-
-        this.updateInputStates();
-
-        this.dom.locationBtn.addEventListener('click', async () => {
-            const newExtended = root.dataset.extended !== 'true';
-
-            root.dataset.extended = String(newExtended);
-            await Utils.setStorageData({ extended: newExtended });
-
-            const arrowIcon = this.dom.locationBtn.querySelector('.arrow-icon');
-            arrowIcon?.classList.toggle('down', !newExtended);
-            arrowIcon?.classList.toggle('up', newExtended);
-
-            this.dom.locationBtn.title = newExtended ? titleVal[1] : titleVal[0];
-
-            this.updateInputStates();
-        });
-
-        this.#bindClearButton(root, 'clearCity', () => this.clearCity());
-        this.#bindClearButton(root, 'clearStreet', () => this.clearStreet());
-        this.#bindClearButton(root, 'clearHouse', () => this.clearHouse());
-
-        await this.loadSavedValues();
-        await this.init();
+    if (isKyivLocked) {
+      this.state.city = 'м. Київ';
     }
 
-    removeInputs() {
-        if (!this.inputsWrapper) return;
-        this.stopRefreshTimer();
+    this.updateInputStates();
 
-        this.inputsWrapper.remove();
-        this.inputsWrapper = null;
-        this.renderedDsoId = null;
+    this.dom.locationBtn.addEventListener('click', async () => {
+      const newExtended = root.dataset.extended !== 'true';
 
-        this.dom.cityInput = null;
-        this.dom.streetInput = null;
-        this.dom.houseInput = null;
+      root.dataset.extended = String(newExtended);
+      await Utils.setStorageData({ extended: newExtended });
 
-        this.state.city = null;
-        this.state.street = null;
-        this.state.house = null;
+      const arrowIcon = this.dom.locationBtn.querySelector('.arrow-icon');
+      arrowIcon?.classList.toggle('down', !newExtended);
+      arrowIcon?.classList.toggle('up', newExtended);
 
-        this.dom.contentWrapper.querySelector('#content-header')?.remove();
-    }
+      this.dom.locationBtn.title = newExtended ? titleVal[1] : titleVal[0];
+
+      this.updateInputStates();
+    });
+
+    this.#bindClearButton(root, 'clearCity', () => this.clearCity());
+    this.#bindClearButton(root, 'clearStreet', () => this.clearStreet());
+    this.#bindClearButton(root, 'clearHouse', () => this.clearHouse());
+
+    await this.loadSavedValues();
+    await this.init();
+  }
+
+  removeInputs() {
+    if (!this.inputsWrapper) return;
+    this.stopRefreshTimer();
+
+    this.inputsWrapper.remove();
+    this.inputsWrapper = null;
+    this.renderedDsoId = null;
+
+    this.dom.cityInput = null;
+    this.dom.streetInput = null;
+    this.dom.houseInput = null;
+
+    this.state.city = null;
+    this.state.street = null;
+    this.state.house = null;
+
+    this.dom.contentWrapper.querySelector('#content-header')?.remove();
+  }
 }

@@ -1,72 +1,77 @@
 import { CONSTANTS } from '../config/constants.js';
-import { Utils } from '../utils/utils.js';
 // ============================================================================
 // МЕНЕДЖЕР ДАТ
 // ============================================================================
 export class DateManager {
-    constructor(dom, onDateChange) {
-        this.dom = dom;
-        this.onDateChange = onDateChange;
-        this.init();
-    }
+  constructor(dom, i18n, onDateChange) {
+    this.dom = dom;
+    this.i18n = i18n;
+    this.onDateChange = onDateChange;
+    this.init();
+  }
 
-    init() {
-        this.updateDateNumbers();
-        this.#setupDateButtons();
-        this.updateIndicator();
-    }
+  init() {
+    this.updateDateNumbers();
+    this.#setupDateButtons();
+    this.updateIndicator();
 
-    updateDateNumbers() {
-        const today = new Date();
-        const tomorrow = new Date(today);
-        tomorrow.setDate(today.getDate() + 1);
+    this.i18n.onLocaleChange(() => {
+      this.updateDateNumbers();
+    });
+  }
 
-        const { dateGroup } = this.dom;
-        const todayBtn = dateGroup.querySelector('[data-type="today"]');
-        const tomorrowBtn = dateGroup.querySelector('[data-type="tomorrow"]');
+  #checkEasterEgg(today) {
+    if (today.getDate() !== CONSTANTS.EASTER_EGG_DATES.today) return;
+    if (this.dom.dateGroup.querySelector('.easter')) return;
 
-        if (todayBtn) todayBtn.textContent = `Сьогодні ${Utils.formatDate(today)}`;
-        if (tomorrowBtn) tomorrowBtn.textContent = `Завтра ${Utils.formatDate(tomorrow)}`;
+    const easterEgg = Object.assign(document.createElement('img'), {
+      src: CONSTANTS.EASTER_EGG_GIF,
+      alt: '67',
+      className: 'easter z-1'
+    });
+    this.dom.dateGroup.appendChild(easterEgg);
+  }
 
-        this.#checkEasterEgg(today);
-    }
+  #setupDateButtons() {
+    this.dom.dateGroup.addEventListener('click', (e) => {
+      const btn = e.target.closest('.date-btn');
+      if (!btn || btn.classList.contains('active')) return;
 
-    #checkEasterEgg(today) {
-        if (today.getDate() !== CONSTANTS.EASTER_EGG_DATES.today) return;
-        if (this.dom.dateGroup.querySelector('.easter')) return;
+      this.dom.activeDateBtn?.classList.remove('active');
+      btn.classList.add('active');
 
-        const easterEgg = Object.assign(document.createElement('img'), {
-            src: CONSTANTS.EASTER_EGG_GIF,
-            alt: '67',
-            className: 'easter z-1'
-        });
-        this.dom.dateGroup.appendChild(easterEgg);
-    }
+      this.updateIndicator();
+      this.onDateChange?.();
+    });
+  }
 
-    #setupDateButtons() {
-        this.dom.dateGroup.addEventListener('click', (e) => {
-            const btn = e.target.closest('.date-btn');
-            if (!btn || btn.classList.contains('active')) return;
+  updateDateNumbers() {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
 
-            this.dom.activeDateBtn?.classList.remove('active');
-            btn.classList.add('active');
+    const { dateGroup } = this.dom;
 
-            this.updateIndicator();
-            this.onDateChange?.();
-        });
-    }
+    const todayBtn = dateGroup.querySelector('[data-type="today"]');
+    const tomorrowBtn = dateGroup.querySelector('[data-type="tomorrow"]');
 
-    updateIndicator() {
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                const { dateIndicator: indicator, activeDateBtn: activeBtn, dateGroup } = this.dom;
-                if (!activeBtn || !indicator) return;
+    if (todayBtn) todayBtn.textContent = `${this.i18n.get('today')} ${this.i18n.formatDate(today)}`;
+    if (tomorrowBtn) tomorrowBtn.textContent = `${this.i18n.get('tomorrow')} ${this.i18n.formatDate(tomorrow)}`;
 
-                const btnRect = activeBtn.getBoundingClientRect();
-                const groupRect = dateGroup.getBoundingClientRect();
+    this.#checkEasterEgg(today);
+  }
 
-                indicator.style.cssText = `width:${btnRect.width}px;height:${btnRect.height}px;transform:translateX(${btnRect.left - groupRect.left - CONSTANTS.INDICATOR_PADDING}px)`;
-            });
-        });
-    }
+  updateIndicator() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const { dateIndicator: indicator, activeDateBtn: activeBtn, dateGroup } = this.dom;
+        if (!activeBtn || !indicator) return;
+
+        const btnRect = activeBtn.getBoundingClientRect();
+        const groupRect = dateGroup.getBoundingClientRect();
+
+        indicator.style.cssText = `width:${btnRect.width}px;height:${btnRect.height}px;transform:translateX(${btnRect.left - groupRect.left - CONSTANTS.INDICATOR_PADDING}px)`;
+      });
+    });
+  }
 }

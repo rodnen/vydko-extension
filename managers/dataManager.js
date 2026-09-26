@@ -8,110 +8,129 @@ const LOAD_DATA_MIN_INTERVAL_MS = 800;
 // МЕНЕДЖЕР ДАНИХ
 // ============================================================================
 export class DataManager {
-    #box;
+  #box;
 
-    #lastRunAt = 0;
-    #isRunning = false;
-    #pendingCall = false;
-    #throttleTimer = null;
-    #coalesceScheduled = false;
+  #lastRunAt = 0;
+  #isRunning = false;
+  #pendingCall = false;
+  #throttleTimer = null;
+  #coalesceScheduled = false;
+  #updatedOn = null;
 
-    constructor(dom, selectManager, dateManager) {
-        this.dom = dom;
-        this.selectManager = selectManager;
-        this.dateManager = dateManager;
-        this.#box = new BoxView(dom);
+  constructor(dom, i18n, selectManager, dateManager) {
+    this.dom = dom;
+    this.i18n = i18n;
+    this.selectManager = selectManager;
+    this.dateManager = dateManager;
+    this.#box = new BoxView(dom);
+    this.i18n.onLocaleChange(() => this.#renderUpdatedOn());
+  }
+
+  #renderUpdatedOn() {
+    if (this.#updatedOn == null) {
+      this.#box.setUpdatedOn(null);
+      return;
     }
 
-    async loadData() {
-        if (this.#coalesceScheduled) return;
-        this.#coalesceScheduled = true;
+    this.#box.setUpdatedOn(this.i18n.formatUpdatedOn(this.#updatedOn));
+  }
 
-        await Promise.resolve();
-        this.#coalesceScheduled = false;
+  async loadData() {
+    if (this.#coalesceScheduled) return;
+    this.#coalesceScheduled = true;
 
-        const elapsed = Date.now() - this.#lastRunAt;
+    await Promise.resolve();
+    this.#coalesceScheduled = false;
 
-        if (this.#isRunning || elapsed < LOAD_DATA_MIN_INTERVAL_MS) {
-            this.#pendingCall = true;
-            this.#scheduleTrailingRun(Math.max(0, LOAD_DATA_MIN_INTERVAL_MS - elapsed));
-            return;
-        }
+    const elapsed = Date.now() - this.#lastRunAt;
 
-        await this.#runLoadData();
+    if (this.#isRunning || elapsed < LOAD_DATA_MIN_INTERVAL_MS) {
+      this.#pendingCall = true;
+      this.#scheduleTrailingRun(Math.max(0, LOAD_DATA_MIN_INTERVAL_MS - elapsed));
+      return;
     }
 
-    #scheduleTrailingRun(delay) {
-        if (this.#throttleTimer) return;
+    await this.#runLoadData();
+  }
 
-        this.#throttleTimer = setTimeout(async () => {
-            this.#throttleTimer = null;
+  #scheduleTrailingRun(delay) {
+    if (this.#throttleTimer) return;
 
-            if (!this.#pendingCall) return;
-            this.#pendingCall = false;
+    this.#throttleTimer = setTimeout(async () => {
+      this.#throttleTimer = null;
 
-            await this.#runLoadData();
-        }, delay);
+      if (!this.#pendingCall) return;
+      this.#pendingCall = false;
+
+      await this.#runLoadData();
+    }, delay);
+  }
+
+  async #runLoadData() {
+    this.#isRunning = true;
+    this.#lastRunAt = Date.now();
+
+    try {
+      await this.#fetchAndRender();
+    } finally {
+      this.#isRunning = false;
+
+      if (this.#pendingCall) {
+        this.#scheduleTrailingRun(LOAD_DATA_MIN_INTERVAL_MS);
+      }
+    }
+  }
+
+  async #fetchAndRender() {
+    const { group, regionId, dsoId } = this.selectManager.getValues();
+
+    if (Utils.isInvalidValue(group, regionId, dsoId)) {
+      this.#box.setContent(Utils.buildStatusIndicatorHTML('choose'));
+      this.#updatedOn = null;
+      this.#renderUpdatedOn();
+      return;
     }
 
-    async #runLoadData() {
-        this.#isRunning = true;
-        this.#lastRunAt = Date.now();
+    const modeKey = await Utils.getModeKey();
+    const strategy = MODE_STRATEGIES[modeKey];
 
-        try {
-            await this.#fetchAndRender();
-        } finally {
-            this.#isRunning = false;
-
-            if (this.#pendingCall) {
-                this.#scheduleTrailingRun(LOAD_DATA_MIN_INTERVAL_MS);
-            }
-        }
+    if (!strategy) {
+      const errorMsg = `Unknown mode key: ${modeKey}`;
+      this.#box.showError(errorMsg);
+      return;
     }
 
-    async #fetchAndRender() {
-        const { group, regionId, dsoId } = this.selectManager.getValues();
+    const dayType = this.dateManager.dom.activeDateBtn?.dataset.type ?? 'today';
+    const currentDayNumber = new Date().getDate();
 
-        if (Utils.isInvalidValue(group, regionId, dsoId)) {
-            this.#box.setContent(Utils.buildStatusIndicatorHTML('choose'));
-            this.#box.setUpdatedOn(null);
-            return;
-        }
+    const context = { group, regionId, dsoId, dayType, currentDayNumber };
+    const payload = strategy.buildPayload(context);
 
-        const modeKey = await Utils.getModeKey();
-        const strategy = MODE_STRATEGIES[modeKey];
+    try {
+      const response = await chrome.runtime.sendMessage(payload);
+      const { success, html, status, updatedOn, error } = response;
+      this.#updatedOn = updatedOn;
 
-        if (!strategy) {
-            const errorMsg = `Unknown mode key: ${modeKey}`;
-            this.#box.showError(errorMsg);
-            return;
-        }
+      if (!success) {
+        this.#box.showError(error);
+        return;
+      }
 
-        const dayType = this.dateManager.dom.activeDateBtn?.dataset.type ?? 'today';
-        const currentDayNumber = new Date().getDate();
+      const statusHTML = status
+        ? Utils.buildStatusIndicatorHTML(status)
+        : '';
 
-        const context = { group, regionId, dsoId, dayType, currentDayNumber };
-        const payload = strategy.buildPayload(context);
-
-        try {
-            const { success, html, updatedOn, outageDates, error } = await chrome.runtime.sendMessage(payload);
-
-            if (!success) {
-                this.#box.showError(error);
-                return;
-            }
-
-            this.#box.setContent(html);
-            this.#box.setUpdatedOn(updatedOn);
-            this.#box.scrollToSelected();
-        } catch (error) {
-            const errorMsg = `loadData error: ${error}`;
-            console.error('[DataManager]', errorMsg);
-            this.#box.showError(errorMsg);
-        }
+      this.#box.setContent(`${html ?? ''}${statusHTML}`);
+      this.#box.scrollToSelected();
+      this.#renderUpdatedOn();
+    } catch (error) {
+      const errorMsg = `loadData error: ${error}`;
+      console.error('[DataManager]', errorMsg);
+      this.#box.showError(errorMsg);
     }
+  }
 
-    scrollToCurrentElement() {
-        this.#box.scrollToSelected();
-    }
+  scrollToCurrentElement() {
+    this.#box.scrollToSelected();
+  }
 }

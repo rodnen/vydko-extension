@@ -6,7 +6,7 @@ const DTEK_KEM_ORIGIN_URL = 'https://www.dtek-kem.com.ua/ua';
 
 export const CONSTANTS = {
   APP_VERSION: chrome.runtime.getManifest().version,
-  APP_NAME: 'Vydko Extension',
+  APP_NAME: 'Видко',
 
   //GIT HUB
   RATE_LIMIT_UNTIL_KEY: 'rateLimitUntil',
@@ -24,15 +24,11 @@ export const CONSTANTS = {
   EASTER_EGG_DATES: Object.freeze({ today: 6, tomorrow: 7 }),
   EASTER_EGG_GIF: 'https://cdn.7tv.app/emote/01K91ZKMKBW0EA884967R3MHCM/1x.gif',
   CHECK_INTERVAL: 6 * 60 * 60 * 1000,
-  
+
   //DSOI IDS
   DNEM_DSO_ID: { yasno: '301', dtek: 'dnem' },
-  CEK_DSO_ID:  { yasno: '303', dtek: 'cek' },
-  KEM_DSO_ID:  { yasno: '902', dtek: 'kem' },
-  
-  //LINKS
-  YASNO_KYIV_URL: 'https://app.yasno.ua/api/blackout-service/public/shutdowns/regions/25/dsos/902/planned-outages',
-  YASNO_KYIV_ADRESSES: 'https://app.yasno.ua/api/blackout-service/public/shutdowns/addresses/v2/regions',
+  CEK_DSO_ID: { yasno: '303', dtek: 'cek' },
+  KEM_DSO_ID: { yasno: '902', dtek: 'kem' },
 
   DTEK_DNEM_ORIGIN_URL,
   DTEK_KEM_ORIGIN_URL,

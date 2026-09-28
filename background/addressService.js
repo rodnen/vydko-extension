@@ -14,10 +14,15 @@ const DEFAULT_PARAMS = {
 };
 
 export class AddressService {
-  #dtekApiInstances = {
-    dnem: new DtekAddressApi('dnem'),
-    kem: new DtekAddressApi('kem')
-  };
+  #dtekApiInstances;
+
+  constructor(i18n) {
+    this.i18n = i18n;
+    this.#dtekApiInstances = {
+      dnem: new DtekAddressApi('dnem', i18n),
+      kem: new DtekAddressApi('kem', i18n)
+    };
+  }
 
   isYasnoType(type) {
     return type === 'yasno';
@@ -26,7 +31,7 @@ export class AddressService {
   getDtekApi(type) {
     const api = this.#dtekApiInstances[type];
     if (!api) {
-      throw new Error(`Невідомий тип DTEK: "${type}". Очікується "dnem" або "kem".`);
+      throw new Error(this.i18n.get('apiDtekUnknownType', String(type)));
     }
     return api;
   }
@@ -34,12 +39,12 @@ export class AddressService {
   async getCities(params) {
     try {
       const { regionId, dsoId, query } = params;
-      const api = new YasnoAddressApi({ regionId, dsoId });
+      const api = new YasnoAddressApi({ regionId, dsoId }, this.i18n);
       const data = await api.getCities(query);
       return { success: true, data };
     } catch (error) {
       console.error('[Address] помилка getCities:', error);
-      return { success: false, error: serializeError(error) };
+      return { success: false, error: serializeError(error, this.i18n) };
     }
   }
 
@@ -47,7 +52,7 @@ export class AddressService {
     try {
       if (this.isYasnoType(type)) {
         const { regionId, dsoId, cityId, query } = params;
-        const api = new YasnoAddressApi({ regionId, dsoId });
+        const api = new YasnoAddressApi({ regionId, dsoId }, this.i18n);
         const data = await api.getStreets(cityId, query);
         return { success: true, data };
       }
@@ -56,7 +61,7 @@ export class AddressService {
       return { success: true, data };
     } catch (error) {
       console.error('[Address] помилка getStreets:', error);
-      return { success: false, error: serializeError(error) };
+      return { success: false, error: serializeError(error, this.i18n) };
     }
   }
 
@@ -64,7 +69,7 @@ export class AddressService {
     try {
       if (this.isYasnoType(type)) {
         const { regionId, dsoId, cityId, streetId, query } = params;
-        const api = new YasnoAddressApi({ regionId, dsoId });
+        const api = new YasnoAddressApi({ regionId, dsoId }, this.i18n);
         const data = await api.getHouses(cityId, streetId, query);
         return { success: true, data };
       }
@@ -73,7 +78,7 @@ export class AddressService {
       return { success: true, data };
     } catch (error) {
       console.error('[Address] помилка getHouseNumbers:', error);
-      return { success: false, error: serializeError(error) };
+      return { success: false, error: serializeError(error, this.i18n) };
     }
   }
 
@@ -81,7 +86,7 @@ export class AddressService {
     try {
       if (this.isYasnoType(type)) {
         const { regionId, dsoId, cityId, streetId, houseId } = params;
-        const api = new YasnoAddressApi({ regionId, dsoId });
+        const api = new YasnoAddressApi({ regionId, dsoId }, this.i18n);
         const data = await api.getGroup(cityId, streetId, houseId);
         return { success: true, data };
       }
@@ -98,7 +103,7 @@ export class AddressService {
       };
     } catch (error) {
       console.error('[DTEK/Yasno] помилка getHouseData:', error);
-      return { success: false, error: serializeError(error) };
+      return { success: false, error: serializeError(error, this.i18n) };
     }
   }
 

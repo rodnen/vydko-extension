@@ -125,26 +125,30 @@ class Utils {
    * Генерує HTML для відображення помилки завантаження
    * @returns {string} - HTML рядок
    */
-  static buildLoadErrorHTML(error = {}) {
+  static buildLoadErrorHTML(i18n, error = {}) {
     return `
-        <p class="message p-8">${chrome.i18n.getMessage('loadErrorTitle')}</p>
+          <p class="message p-8" data-i18n="loadErrorTitle">${i18n.get('loadErrorTitle')}</p>
 
-        ${error?.message
-        ? `<p class="message p-8 secondary-text">${chrome.i18n.getMessage('loadErrorReason')}: ${error.message}</p>`
+          ${error?.message
+        ? `<p class="message p-8 secondary-text"><span data-i18n="loadErrorReason">${i18n.get('loadErrorReason')}</span>: ${error.message}</p>`
         : ''}
 
-        ${error?.url
-        ? `<a href="${error.url}" target="_blank" rel="noopener noreferrer" class="message p-8 secondary-text">${chrome.i18n.getMessage('loadErrorOpenSite')}</a>`
+          ${error?.url
+        ? `<a href="${error.url}" target="_blank" rel="noopener noreferrer" class="message p-8 secondary-text" data-i18n="loadErrorOpenSite">${i18n.get('loadErrorOpenSite')}</a>`
         : ''}
 
-        <br>
+          <br>
 
-        <p class="message p-8 secondary-text">${chrome.i18n.getMessage('loadErrorConnectionHelp')}</p>
-        <p class="message p-8 secondary-text">${chrome.i18n.getMessage('loadErrorCacheBefore')} <b>${chrome.i18n.getMessage('loadErrorClearCache')}</b> ${chrome.i18n.getMessage('loadErrorCacheAfter')}</p>
-    `;
+          <p class="message p-8 secondary-text" data-i18n="loadErrorConnectionHelp">${i18n.get('loadErrorConnectionHelp')}</p>
+          <p class="message p-8 secondary-text">
+              <span data-i18n="loadErrorCacheBefore">${i18n.get('loadErrorCacheBefore')}</span>
+              <b data-i18n="loadErrorClearCache">${i18n.get('loadErrorClearCache')}</b>
+              <span data-i18n="loadErrorCacheAfter">${i18n.get('loadErrorCacheAfter')}</span>
+          </p>
+      `;
   }
 
-  static buildStatusIndicatorHTML(type) {
+  static buildStatusIndicatorHTML(i18n, type) {
     const config = {
       ok: { titleKey: 'outages', statusKey: 'notApplicable' },
       warning: { title: '⏳', statusKey: 'statusBadgeWarning' },
@@ -155,17 +159,17 @@ class Utils {
 
     const { titleKey, title, statusKey } = config[type] ?? {};
 
-    const titleText = titleKey ? chrome.i18n.getMessage(titleKey) : (title ?? '');
-    const statusText = statusKey ? chrome.i18n.getMessage(statusKey) : '';
+    const titleText = titleKey ? i18n.get(titleKey) : (title ?? '');
+    const statusText = statusKey ? i18n.get(statusKey) : '';
 
     return `
-        <div class="status-indicator flex-center flex-col">
-            <div class="status-title ${type}">${titleText}</div>
-            <div class="status-badge ${type}">
-                ${statusText}
-            </div>
-        </div>
-    `;
+          <div class="status-indicator flex-center flex-col">
+              <div class="status-title ${type}"${titleKey ? ` data-i18n="${titleKey}"` : ''}>${titleText}</div>
+              <div class="status-badge ${type}"${statusKey ? ` data-i18n="${statusKey}"` : ''}>
+                  ${statusText}
+              </div>
+          </div>
+      `;
   }
 
   /**

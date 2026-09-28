@@ -116,15 +116,22 @@ export class SelectManager {
   #buildDsoOptionsFragment(options) {
     const fragment = document.createDocumentFragment();
 
-    for (const { region, value, label } of options) {
+    options.forEach(({ region, value, label }, index) => {
       const opt = document.createElement('div');
       opt.className = 'option';
       opt.dataset.region = String(region);
       opt.dataset.value = String(value);
       opt.dataset.i18n = label;
       opt.textContent = this.i18n.get(label);
+
       fragment.appendChild(opt);
-    }
+
+      if (index < options.length - 1) {
+        const separator = document.createElement('div');
+        separator.className = 'menu-separator';
+        fragment.appendChild(separator);
+      }
+    });
 
     return fragment;
   }

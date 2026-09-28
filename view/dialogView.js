@@ -5,7 +5,7 @@
 // цей клас нічого не знає про валідацію, кроки візарда чи відправку даних.
 // ============================================================================
 export class DialogView {
-  #LOADER_HTML = '<div class="update-wrapper p-15 flex-center"><div class="loader"></div></div>';
+  #LOADER_HTML = '<div class="update-wrapper"><div class="loader"></div></div>';
   #FULLSCREEN_CLASS = '_dialog-fullscreen';
   #MODAL_CLASS = '_dialog-modal';
   #ANIM_MS = 250;
@@ -263,7 +263,15 @@ export class DialogView {
   }
 
   updateContent(content, isHTML = false) {
-    this.#content[isHTML ? 'innerHTML' : 'textContent'] = content;
+    let updateWrapper = this.#content.querySelector(':scope > .update-wrapper');
+    if (!updateWrapper) {
+      this.#content.innerHTML = this.#LOADER_HTML;
+      updateWrapper = this.#content.querySelector(':scope > .update-wrapper');
+    }
+
+    const value = content ?? '';
+    updateWrapper[isHTML ? 'innerHTML' : 'textContent'] = value;
+    updateWrapper.classList.toggle('has-content', String(value).trim().length > 0);
   }
 
   updateDialog(title, content, isHTML = false, isFullScreen = false, hasBackButton = false) {

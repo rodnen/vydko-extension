@@ -3,7 +3,7 @@
  *
  * Приклад використання:
  *
- *   const api = new YasnoAddressApi({ regionId: 3, dsoId: 301 });
+ *   const api = new YasnoAddressApi({ regionId: 3, dsoId: 301 }, i18n);
  *
  *   const cities = await api.getCities('л');
  *   const streets = await api.getStreets(4, 'п');
@@ -18,9 +18,11 @@ export class YasnoAddressApi {
   baseUrl = 'https://app.yasno.ua/api/blackout-service/public/shutdowns';
   addressesPath = 'addresses/v2';
 
-  constructor({ regionId, dsoId }) {
+  /** @param {I18n} i18n - локалізатор з вибраною користувачем мовою */
+  constructor({ regionId, dsoId }, i18n) {
     this.regionId = regionId;
     this.dsoId = dsoId;
+    this.i18n = i18n;
   }
 
   /** Побудувати URL з довільним набором query-параметрів. Параметри зі значенням
@@ -89,7 +91,7 @@ export class YasnoAddressApi {
     try {
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(chrome.i18n.getMessage('apiYasnoHttpError', [
+        throw new Error(this.i18n.get('apiYasnoHttpError', [
           String(response.status),
           response.statusText
         ]));

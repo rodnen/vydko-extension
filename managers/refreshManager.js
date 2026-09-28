@@ -11,12 +11,13 @@ export class RefreshManager {
   #box;
   #messageManager;
 
-  constructor(dom, cacheManager, messageManager, onRefresh) {
+  constructor(dom, cacheManager, messageManager, i18n, onRefresh) {
     this.dom = dom;
     this.cache = cacheManager;
     this.#messageManager = messageManager;
     this.onRefresh = onRefresh;
-    this.#box = new BoxView(dom);
+    this.i18n = i18n;
+    this.#box = new BoxView(dom, i18n);
     this.init();
   }
 
@@ -54,7 +55,7 @@ export class RefreshManager {
       console.error('[RefreshManager] refresh error:', error);
       this.#box.showError();
     } finally {
-      this.#toast('Оновлено', 'info', 'ic_info', 2000);
+      this.#toast(this.i18n.get('outageUpdated'), 'info', 'ic_info', 2000);
 
       const remaining = CONSTANTS.REFRESH_MIN_DURATION - (Date.now() - startTime);
       if (remaining > 0) await Utils.delay(remaining);

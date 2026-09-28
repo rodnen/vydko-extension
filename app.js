@@ -115,6 +115,7 @@ export class App {
       dom,
       this.cacheManager,
       this.messageManager,
+      this.i18n,
       async () => {
         await this.dataManager.loadData();
         this.dateManager.updateDateNumbers();

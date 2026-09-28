@@ -8,9 +8,10 @@ import { renderDtekTable } from './renderers/dtekRenderer.js';
 import { YasnoAddressApi } from '../services/api/yasnoAddressApi.js';
 
 export class ScheduleService {
-  constructor({ cacheService, addressService = new AddressService() }) {
+  constructor({ cacheService, addressService, i18n }) {
     this.cache = cacheService;
-    this.address = addressService;
+    this.address = addressService ?? new AddressService(i18n);
+    this.i18n = i18n;
   }
 
   async buildYasnoTable(
@@ -40,7 +41,7 @@ export class ScheduleService {
       if (secondCheck) return secondCheck;
 
       try {
-        const api = new YasnoAddressApi({ regionId, dsoId });
+        const api = new YasnoAddressApi({ regionId, dsoId }, this.i18n);
         const data = await api.getPlannedOutages();
         const result = renderYasnoTable(data, group, currentDayNumber, dayType);
 
@@ -48,7 +49,7 @@ export class ScheduleService {
         return result;
       } catch (error) {
         console.error('[BG] Yasno: error', error);
-        return { success: false, error: serializeError(error) };
+        return { success: false, error: serializeError(error, this.i18n) };
       }
     });
   }
@@ -85,13 +86,13 @@ export class ScheduleService {
       return result;
     } catch (error) {
       console.error('[DTEK] error:', error);
-      return { success: false, error: serializeError(error) };
+      return { success: false, error: serializeError(error, this.i18n) };
     }
   }
 
   async saveScheduleAndReturn(result) {
     if (result?.success && result.outageDates) {
-      await NotificationScheduler.saveOutageSchedule(result.outageDates);
+      await NotificationScheduler.saveOutageSchedule(result.outageDates, this.i18n);
     }
 
     return result;

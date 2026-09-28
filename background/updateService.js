@@ -2,7 +2,8 @@ import { CONSTANTS } from '../config/constants.js';
 import { Utils } from '../utils/utils.js';
 
 export class UpdateService {
-  constructor({ currentVersion = chrome.runtime.getManifest().version } = {}) {
+  constructor({ i18n, currentVersion = chrome.runtime.getManifest().version } = {}) {
+    this.i18n = i18n;
     this.currentVersion = currentVersion;
   }
 
@@ -35,7 +36,7 @@ export class UpdateService {
     if (!response.ok) {
       return {
         success: false,
-        error: chrome.i18n.getMessage('updateGitHubUnavailable', String(response.status))
+        error: this.i18n.get('updateGitHubUnavailable', String(response.status))
       };
     }
 
@@ -45,14 +46,14 @@ export class UpdateService {
     } catch {
       return {
         success: false,
-        error: chrome.i18n.getMessage('updateGitHubInvalidResponse')
+        error: this.i18n.get('updateGitHubInvalidResponse')
       };
     }
 
     if (!latest?.tag_name) {
       return {
         success: false,
-        error: chrome.i18n.getMessage('updateGitHubNoReleases')
+        error: this.i18n.get('updateGitHubNoReleases')
       };
     }
 
@@ -70,8 +71,8 @@ export class UpdateService {
       await chrome.notifications.create('update-available', {
         type: 'basic',
         iconUrl: 'icons/icon128.png',
-        title: chrome.i18n.getMessage('updateNotificationTitle'),
-        message: chrome.i18n.getMessage('updateNotificationMessage', latestVer)
+        title: this.i18n.get('updateNotificationTitle'),
+        message: this.i18n.get('updateNotificationMessage', latestVer)
       });
     }
 

@@ -4,13 +4,18 @@ export class BoxView {
   #box;
   #footer;
 
-  constructor(dom) {
+  constructor(dom, i18n) {
     this.dom = dom;
+    this.i18n = i18n;
     this.#box = dom.box;
     this.#footer = dom.footer;
+    this.#createUpdatedWrapper();
   }
 
   #createUpdatedWrapper() {
+    const existing = this.#footer.querySelector('.updated-wrapper');
+    if (existing) return existing;
+
     const container = document.createElement('div');
     container.className = 'updated-wrapper';
     this.#footer.prepend(container);
@@ -61,35 +66,40 @@ export class BoxView {
     if (!container) return;
 
     const el = container.querySelector('.updated-on');
+    container.style.width = '30px';
+    container.classList.remove('is-expanded');
 
-    const collapse = () => {
-      container.style.width = '0px';
-      container.classList.remove('is-expanded');
-      container.addEventListener('transitionend', (e) => {
-        if (e.target === container) container.remove();
-      }, { once: true });
+    if (!el) return;
+
+    el.classList.remove('is-visible');
+
+    const removeContent = () => {
+      if (container.classList.contains('is-expanded')) return;
+      el.remove();
+    };
+    const onTransitionEnd = (e) => {
+      if (e.target !== container || e.propertyName !== 'width') return;
+      container.removeEventListener('transitionend', onTransitionEnd);
+      removeContent();
     };
 
-    if (el) {
-      el.classList.remove('is-visible');
-      el.addEventListener('transitionend', (e) => {
-        if (e.target === el) collapse();
-      }, { once: true });
-    } else {
-      collapse();
-    }
+    container.addEventListener('transitionend', onTransitionEnd);
+    setTimeout(() => {
+      container.removeEventListener('transitionend', onTransitionEnd);
+      removeContent();
+    }, 450);
   }
 
-  showLoading(message = 'Йде завантаження…') {
+  showLoading() {
     this.#box.classList.remove('error', 'flex-center');
     this.#box.classList.add('loading', 'flex-center');
-    this.#box.innerHTML = `<div class="loading-wrapper g-10 flex-center flex-row"><div class="loader"></div><p>${message}</p></div>`;
+    this.#box.innerHTML = `<div class="loading-wrapper g-10 flex-center flex-row"><div class="loader"></div><p>${this.i18n.get('loading')}</p></div>`;
   }
 
   showError(error) {
     this.#box.classList.remove('loading', 'flex-center');
     this.#box.classList.add('error', 'flex-center');
-    this.#box.innerHTML = Utils.buildLoadErrorHTML(error);
+    this.#box.innerHTML = Utils.buildLoadErrorHTML(this.i18n, error);
   }
 
   setContent(html) {

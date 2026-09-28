@@ -5,12 +5,16 @@ export class MessageRouter {
     updateService,
     scheduleService,
     addressService,
-    cacheService
+    cacheService,
+    i18n,
+    localizationReady = Promise.resolve()
   }) {
     this.updateService = updateService;
     this.scheduleService = scheduleService;
     this.addressService = addressService;
     this.cacheService = cacheService;
+    this.i18n = i18n;
+    this.localizationReady = localizationReady;
   }
 
   createHandlers(message) {
@@ -45,22 +49,27 @@ export class MessageRouter {
 
   handle(message, sender, sendResponse) {
     if (!message || typeof message.action !== 'string') {
-      sendResponse({
-        success: false,
-        error: { message: chrome.i18n.getMessage('messageRouterInvalidMessage') }
-      });
-      return false;
+      Promise.resolve(this.localizationReady)
+        .then(() => sendResponse({
+          success: false,
+          error: { message: this.i18n.get('messageRouterInvalidMessage') }
+        }))
+        .catch(error => sendResponse({
+          success: false,
+          error: serializeError(error, this.i18n)
+        }));
+      return true;
     }
 
     const handler = this.createHandlers(message)[message.action];
     if (!handler) return false;
 
-    Promise.resolve()
+    Promise.resolve(this.localizationReady)
       .then(handler)
       .then(sendResponse)
       .catch(error => sendResponse({
         success: false,
-        error: serializeError(error)
+        error: serializeError(error, this.i18n)
       }));
 
     return true;

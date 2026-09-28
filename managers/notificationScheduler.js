@@ -26,17 +26,17 @@ export class NotificationScheduler {
    * Викликається періодично з chrome.alarms.onAlarm.
    * Сам знаходить найближчу подію в розкладі й перевіряє її.
    */
-  static async checkUpcoming() {
+  static async checkUpcoming(i18n) {
     const nextTimestamp = await this.#getNextTimestamp();
     if (!nextTimestamp) return;
-    await this.checkAndNotify(String(nextTimestamp), nextTimestamp);
+    await this.checkAndNotify(String(nextTimestamp), nextTimestamp, null, i18n);
   }
 
   /**
    * Головна перевірка.
    * prefetchedSettings — якщо ENABLED/DELAY/FREQUENCY вже на руках, щоб не робити зайвий похід у storage.
    */
-  static async checkAndNotify(eventKey, eventTimestamp, prefetchedSettings = null) {
+  static async checkAndNotify(eventKey, eventTimestamp, prefetchedSettings = null, i18n) {
     const settings = prefetchedSettings ?? await Utils.getStorageData([
       CONSTANTS.NOTIFICATION_ENABLED_KEY,
       CONSTANTS.NOTIFICATION_DELAY_KEY,
@@ -93,7 +93,8 @@ export class NotificationScheduler {
 
       this.#fireNotification(
         eventTimestamp,
-        actualMinutesLeft
+        actualMinutesLeft,
+        i18n
       );
 
       state.sentCount = dueStepIndex + 1;
@@ -111,7 +112,7 @@ export class NotificationScheduler {
    * Зберігає новий розклад відключень і одразу перевіряє,
    * чи не треба сповістити негайно (напр. якщо найближча подія вже дуже скоро).
    */
-  static async saveOutageSchedule(outageDates) {
+  static async saveOutageSchedule(outageDates, i18n) {
     if (!outageDates) return;
 
     const timestamps = [...new Set(
@@ -124,7 +125,7 @@ export class NotificationScheduler {
       [CONSTANTS.NOTIFICATION_DATES_KEY]: timestamps
     });
 
-    await this.checkUpcoming();
+    await this.checkUpcoming(i18n);
   }
 
   static async #getNextTimestamp() {
@@ -135,12 +136,12 @@ export class NotificationScheduler {
     return schedule.find(ts => ts > now) ?? null;
   }
 
-  static #fireNotification(eventTimestamp, actualMinutesLeft) {
+  static #fireNotification(eventTimestamp, actualMinutesLeft, i18n) {
     const title = actualMinutesLeft > 0
-      ? chrome.i18n.getMessage('notificationOutageSoonTitle', String(actualMinutesLeft))
-      : chrome.i18n.getMessage('notificationOutageNowTitle');
+      ? i18n.get('notificationOutageSoonTitle', String(actualMinutesLeft))
+      : i18n.get('notificationOutageNowTitle');
 
-    const time = new Date(eventTimestamp).toLocaleTimeString(chrome.i18n.getUILanguage(), {
+    const time = new Date(eventTimestamp).toLocaleTimeString(i18n.getLocale(), {
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -149,7 +150,7 @@ export class NotificationScheduler {
       type: 'basic',
       iconUrl: 'icons/icon128.png',
       title,
-      message: chrome.i18n.getMessage('notificationOutageTime', time),
+      message: i18n.get('notificationOutageTime', time),
       priority: 1
     });
   }

@@ -5,11 +5,11 @@ import { CONSTANTS } from '../../config/constants.js';
  *
  * Приклад використання:
  *
- *   const dnem = new DtekAddressApi('dnem');
+ *   const dnem = new DtekAddressApi('dnem', i18n);
  *   const streets = await dnem.getStreets({ city: 'Дніпро' });
  *   const houses = await dnem.getHomeNum({ city: 'Дніпро', street: 'Хрещатик' });
  *
- *   const kem = new DtekAddressApi('kem');
+ *   const kem = new DtekAddressApi('kem', i18n);
  *   const streetsKem = await kem.getStreets();
  *   const housesKem = await kem.getHomeNum({ street: 'Хрещатик' });
  */
@@ -30,13 +30,15 @@ const URLS_BY_TYPE = {
 export class DtekAddressApi {
   /**
    * @param {'dnem' | 'kem'} type - Тип сайту ДТЕК
+   * @param {I18n} i18n - локалізатор з вибраною користувачем мовою
    */
-  constructor(type) {
+  constructor(type, i18n) {
     if (!URLS_BY_TYPE[type]) {
-      throw new Error(chrome.i18n.getMessage('apiDtekUnknownType', String(type)));
+      throw new Error(i18n.get('apiDtekUnknownType', String(type)));
     }
     this.type = type;
     this.urls = URLS_BY_TYPE[type];
+    this.i18n = i18n;
   }
 
   /** Отримати CSRF-токен та csrf-параметр з головної сторінки. */
@@ -51,7 +53,7 @@ export class DtekAddressApi {
 
       if (!pageResponse.ok) {
         throw {
-          message: chrome.i18n.getMessage('apiDtekPageLoadError'),
+          message: this.i18n.get('apiDtekPageLoadError'),
           url: refererPage,
         };
       }
@@ -62,7 +64,7 @@ export class DtekAddressApi {
 
       if (!csrfToken) {
         throw {
-          message: chrome.i18n.getMessage('apiDtekCsrfMissing'),
+          message: this.i18n.get('apiDtekCsrfMissing'),
           url: refererPage,
         };
       }
@@ -110,7 +112,7 @@ export class DtekAddressApi {
       if (!response.ok) {
         const errorText = await response.text();
         throw {
-          message: chrome.i18n.getMessage('apiDtekHttpError', [
+          message: this.i18n.get('apiDtekHttpError', [
             String(response.status),
             errorText
           ]),

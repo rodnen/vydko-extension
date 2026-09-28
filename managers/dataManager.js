@@ -22,7 +22,7 @@ export class DataManager {
     this.i18n = i18n;
     this.selectManager = selectManager;
     this.dateManager = dateManager;
-    this.#box = new BoxView(dom);
+    this.#box = new BoxView(dom, i18n);
     this.i18n.onLocaleChange(() => this.#renderUpdatedOn());
   }
 
@@ -85,7 +85,7 @@ export class DataManager {
     const { group, regionId, dsoId } = this.selectManager.getValues();
 
     if (Utils.isInvalidValue(group, regionId, dsoId)) {
-      this.#box.setContent(Utils.buildStatusIndicatorHTML('choose'));
+      this.#box.setContent(Utils.buildStatusIndicatorHTML(this.i18n, 'choose'));
       this.#updatedOn = null;
       this.#renderUpdatedOn();
       return;
@@ -117,7 +117,7 @@ export class DataManager {
       }
 
       const statusHTML = status
-        ? Utils.buildStatusIndicatorHTML(status)
+        ? Utils.buildStatusIndicatorHTML(this.i18n, status)
         : '';
 
       this.#box.setContent(`${html ?? ''}${statusHTML}`);

@@ -61,8 +61,14 @@ export class I18n {
     };
   }
 
-  get(key) {
-    return this.#messages[key]?.message ?? key;
+  get(key, substitutions = []) {
+    const message = this.#messages[key]?.message ?? key;
+    const values = Array.isArray(substitutions) ? substitutions : [substitutions];
+
+    return values.reduce(
+      (text, value, index) => text.replaceAll(`$${index + 1}`, () => String(value)),
+      message
+    );
   }
 
   getMonthShort(month) {

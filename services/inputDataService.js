@@ -67,7 +67,6 @@ export class InputDataService {
           const street = state?.street ?? this.currentStreet;
           const houses = await this.#loadYasnoHouses(query.trim(), city, street);
 
-          console.log(houses);
           return houses.slice(0, 20);
         }
 
@@ -187,7 +186,6 @@ export class InputDataService {
     const cityId = city?.id ?? null;
     const streetId = street?.id ?? null;
 
-    console.log(this.dsoId);
     if (this.dsoId !== '902')
       if (cityId == null || streetId == null) return [];
 

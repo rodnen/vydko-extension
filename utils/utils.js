@@ -242,6 +242,8 @@ class Utils {
   }
 
   static semverCompare(a, b) {
+    if (!a || !b) return undefined;
+    if (a === b) return 0;
     const clean = v => v.replace(/^[^0-9]*/, '').split('.').map(Number);
     const [va, vb] = [clean(a), clean(b)];
     for (let i = 0; i < 3; i++) {

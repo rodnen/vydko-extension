@@ -25,6 +25,10 @@ header {
     border-bottom: 1px solid var(--glass-border-subtle);
 }
 
+a {
+    text-decoration: none;
+}
+
 .g-075 {
     gap: 0.75rem;
 }
@@ -77,6 +81,9 @@ header {
 
 .p-3 {
     padding: 3px;
+}
+.p-0-5 {
+    padding: 0 5px;
 }
 .p-5 {
     padding: 5px;
@@ -352,8 +359,7 @@ body,
 /* Font 13px + letter-spacing */
 .custom-select .option,
 .custom-input .option,
-.date-select .date-btn,
-.message-block .message-item {
+.date-select .date-btn {
     font-size: 13px;
     letter-spacing: 0.01em;
 }
@@ -530,11 +536,11 @@ footer {
 
 .queue-select .select-options .option:first-child {
     grid-column: 1 / -1;
-    border-bottom: 1px solid var(--glass-border);
+    border-bottom: 1px solid var(--glass-border-subtle);
 }
 
 .queue-select .select-options .option:nth-child(even) {
-    border-right: 1px solid var(--glass-border);
+    border-right: 1px solid var(--glass-border-subtle);
 }
 
 .select-options {
@@ -881,7 +887,6 @@ footer {
 
 .author a {
     color: var(--text);
-    text-decoration: none;
     transition: opacity 0.2s;
 }
 
@@ -1480,8 +1485,7 @@ footer {
 }
 
 /* ── Popup Menu ── */
-.popup-menu,
-.message-block {
+.popup-menu {
     /* Liquid Glass floating panel */
     box-shadow:
         inset 0 1px 0 var(--glass-highlight),
@@ -1491,9 +1495,12 @@ footer {
 }
 
 .message-block {
+    border-radius: 6px;
     background: var(--accent-glass);
+    border: 1px solid var(--glass-border);
+    color: var(--accent-text);
+    font-weight: 500;
     width: calc(100% - 16px);
-    margin: 8px;
     display: flex;
     align-self: center;
 }
@@ -1531,7 +1538,6 @@ footer {
     background: none;
     text-align: left;
     font-weight: 400;
-    color: var(--text);
     transition: background 0.15s ease;
 }
 
@@ -1539,8 +1545,13 @@ footer {
     width: 100%;
 }
 
+.message-block .message-item .icon {
+    background: var(--accent-text);
+}
+
 .menu-item {
     padding: 0.75rem 1rem;
+    color: var(--text);
     width: 100%;
     height: 42px;
     cursor: pointer;
@@ -1587,26 +1598,16 @@ footer {
 .divider,
 .menu-separator {
     width: 100%;
-    height: 0.5px;
+    height: 1px;
 }
 
+.menu-separator,
 .divider {
-    background: var(--glass-border);
-}
-
-.menu-separator {
     background: var(--glass-border-subtle);
 }
 
 .menu-separator {
     margin: 0.25rem 0;
-}
-
-/* ── Menu icon ── */
-.message .message-icon {
-    width: 18px;
-    height: 18px;
-    opacity: 0.8;
 }
 
 /* ── Toggle Switch ── */
@@ -1893,18 +1894,12 @@ input:checked + .slider:before {
     height: 14px;
 }
 
-.toast-icon {
-    width: 20px;
-    height: 20px;
-}
-
 .crypto {
     width: 25px;
     height: 25px;
 }
 
-.icon,
-.toast-icon {
+.icon {
     flex-shrink: 0;
 
     -webkit-mask-size: contain;
@@ -2154,15 +2149,15 @@ input:checked + .slider:before {
     background-color: transparent;
 }
 
-.toast-msg[data-type="info"] .toast-icon {
+.toast-msg[data-type="info"] .icon {
     background-color: var(--toast-info-text);
 }
 
-.toast-msg[data-type="success"] .toast-icon {
+.toast-msg[data-type="success"] .icon {
     background-color: var(--toast-success-text);
 }
 
-.toast-msg[data-type="error"] .toast-icon {
+.toast-msg[data-type="error"] .icon {
     background-color: var(--toast-error-text);
 }
 
@@ -2200,19 +2195,28 @@ input:checked + .slider:before {
 }
 
 .brand-icon {
-    width: 28.4px;
-    height: 28.4px;
+    width: 30px;
+    height: 30px;
+    box-sizing: border-box;
     background: var(--toast-info);
 }
 
 .brand-icon.large {
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
 }
 
 .brand-icon.large .app-icon {
     width: 18px;
     height: 18px;
+}
+
+.brand-name {
+    height: 30px;
+}
+
+.brand-name.large {
+    height: 36px;
 }
 
 .qr-code-body {

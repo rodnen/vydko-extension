@@ -23,6 +23,20 @@ export class VersionManager {
     return Math.max(0, until - Date.now());
   }
 
+  async #syncStateWithCurrentVersion() {
+    const { [CONSTANTS.LATEST_VER_KEY]: latestVer,
+      [CONSTANTS.UPDATE_STATE_KEY]: updateState } =
+      await Utils.getStorageData([CONSTANTS.LATEST_VER_KEY, CONSTANTS.UPDATE_STATE_KEY]);
+
+    const actualState = Utils.semverCompare(CONSTANTS.APP_VERSION, latestVer)
+
+    if (actualState !== undefined && actualState !== updateState) {
+      await Utils.setStorageData({ [CONSTANTS.UPDATE_STATE_KEY]: actualState });
+    }
+
+    return actualState ?? updateState;
+  }
+
   #t(key, values = {}) {
     return Object.entries(values).reduce(
       (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
@@ -30,13 +44,14 @@ export class VersionManager {
     );
   }
 
-  #showUpdateMessage(latestVer) {
-    if (!latestVer) return;
+  #showUpdateMessage(latestVer, pendingUpdateUrl) {
+    if (!latestVer || !pendingUpdateUrl) return;
 
-    this.messageManager?.showMessage({
+    this.messageManager?.showUpdateStatus({
       id: 'update',
-      type: 'info',
-      icon: '🚀',
+      type: 'update',
+      icon: 'ic_arrows_reload',
+      url: pendingUpdateUrl,
       textParts: [
         {
           text: this.i18n.get('versionAvailableMessage'),
@@ -48,24 +63,15 @@ export class VersionManager {
   }
 
   async autoCheck() {
+    const updateState = await this.#syncStateWithCurrentVersion();
     const cooldownLeft = await this.#getRateLimitCooldownLeft();
 
-    if (cooldownLeft > 0) {
-      return;
-    }
-
-    const lastCheck =
-      (await Utils.getStorageValue(CONSTANTS.LAST_CHECK_KEY)) || 0;
-
-    const updateState = await Utils.getStorageValue(
-      CONSTANTS.UPDATE_STATE_KEY
-    );
-
-    const latestVer = await Utils.getStorageValue(
-      CONSTANTS.LATEST_VER_KEY
-    );
-
+    if (cooldownLeft > 0) return;
     const now = Date.now();
+
+    const lastCheck = (await Utils.getStorageValue(CONSTANTS.LAST_CHECK_KEY)) || 0;
+    const latestVer = await Utils.getStorageValue(CONSTANTS.LATEST_VER_KEY);
+    const zipUrl = await Utils.getStorageValue(CONSTANTS.ZIP_URL_KEY);
 
     if (!lastCheck || updateState === undefined) {
       await this.performCheck(false);
@@ -73,14 +79,9 @@ export class VersionManager {
     }
 
     if (now - lastCheck < CONSTANTS.CHECK_INTERVAL) {
-      const isNewer =
-        latestVer &&
-        Utils.semverCompare(latestVer, CONSTANTS.APP_VERSION) === 1;
-
-      if (updateState === -1 && isNewer) {
-        this.#showUpdateMessage(latestVer);
+      if (updateState === -1) {
+        this.#showUpdateMessage(latestVer, zipUrl);
       }
-
       return;
     }
 
@@ -190,6 +191,7 @@ export class VersionManager {
 
     const cmp = Number(result.cmp);
     const latestVer = result.latestVer;
+    const zipUrl = result.zipUrl;
 
     await Utils.setStorageData({
       [CONSTANTS.LAST_CHECK_KEY]: Date.now(),
@@ -199,7 +201,7 @@ export class VersionManager {
     });
 
     if (cmp === -1) {
-      this.#showUpdateMessage(latestVer);
+      this.#showUpdateMessage(latestVer, zipUrl);
     }
 
     if (showResult) {

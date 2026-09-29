@@ -12,7 +12,7 @@ export const CONSTANTS = {
   RATE_LIMIT_UNTIL_KEY: 'rateLimitUntil',
   RATE_LIMIT_COOLDOWN: 15 * 60 * 1000,
   OWNER: 'rodnen',
-  REPO: 'yasno-blackout-schedule-extension',
+  REPO: 'vydko-extension',
 
   //APP CONSTANST
   INDICATOR_PADDING: 5,
@@ -43,6 +43,8 @@ export const CONSTANTS = {
   UPDATE_STATE_KEY: "lastUpdateKey",
   LAST_CHECK_KEY: "lastUpdateCheck",
   LATEST_VER_KEY: "lastVerKey",
+  PENDING_UPDATE_URL_KEY: "pendingUpdateUrl",
+  ZIP_URL_KEY: "zipUrl",
 
   NOTIFICATION_ENABLED_KEY: "notificationEnabled",
   NOTIFICATION_DELAY_KEY: "notitficationDelay",

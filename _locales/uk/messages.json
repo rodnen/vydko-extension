@@ -165,13 +165,13 @@
   "versionStateCurrent": { "message": "Використовується остання версія" },
   "versionStateAvailable": { "message": "Знайдено оновлення: {version}" },
   "versionStateUnknown": { "message": "Стан оновлення невідомий" },
-  "versionAvailableMessage": { "message": "Доступне оновлення: " },
+  "versionAvailableMessage": { "message": "Оновити " },
   "versionRateLimit": {
     "message": "Забагато запитів до GitHub. Спробуйте через {minutes} хв."
   },
   "versionCheckError": { "message": "Помилка при перевірці оновлень" },
   "versionCheckErrorReason": {
-    "message": "Помилка при перевірці оновлень: {reason}"
+    "message": "Помилка: {reason}"
   },
   "updatedYesterdayAt": { "message": "Оновлено вчора о" },
   "updatedAt": { "message": "Оновлено" },

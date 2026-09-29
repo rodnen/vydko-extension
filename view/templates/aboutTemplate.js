@@ -1,13 +1,12 @@
 export const renderAbout = (info, i18n) => {
-  console.log(info.cache);
   return `<div class="modal-wrapper p-10 g-10 flex-col">
         <div class="section-content flex-between glass-panel">
           <div class="flex-center g-10">
             <div class="brand-icon large flex-center glass-panel r14_px">
               <div class="app-icon"></div>
             </div>
-            <div class="flex-col g-3">
-              <div class="flex-align-center g-075">
+            <div class="brand-name large flex-col g-3">
+              <div class="flex-align-center g-5">
                 <span class="main-text">${i18n.get('extName')}</span>
                 <span class="version custom-text t9_px">v${info.version}</span>
               </div>

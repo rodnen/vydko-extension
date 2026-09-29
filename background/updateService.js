@@ -61,13 +61,16 @@ export class UpdateService {
       tag_name: latestVer,
       html_url: url,
       published_at: published,
-      name: description
+      name: description,
+      zipball_url: zipUrl,
     } = latest;
 
     const cmp = Utils.semverCompare(this.currentVersion, latestVer);
 
     if (cmp === -1) {
       await chrome.storage.local.set({ pendingUpdateUrl: url });
+      await chrome.storage.local.set({ zipUrl: zipUrl });
+
       await chrome.notifications.create('update-available', {
         type: 'basic',
         iconUrl: 'icons/icon128.png',
@@ -76,7 +79,7 @@ export class UpdateService {
       });
     }
 
-    return { success: true, cmp, latestVer, published, description };
+    return { success: true, cmp, latestVer, published, description, zipUrl };
   }
 
   registerNotificationHandler() {

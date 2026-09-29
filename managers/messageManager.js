@@ -2,49 +2,78 @@
 // МЕНЕДЖЕР ПОВІДОМЛЕНЬ
 // ============================================================================
 export class MessageManager {
+  // --------------------------------------------------------------------------
+  // Поля
+  // --------------------------------------------------------------------------
   #maxToastCount = 5;
-  #activeToasts = new Map();
   #defaultDuration = 3000;
+  #activeToasts = new Map();
 
   #elements = {
     header: null,
     container: null
   };
 
+  // --------------------------------------------------------------------------
+  // Ініціалізація
+  // --------------------------------------------------------------------------
   constructor(dom = {}) {
     this.#elements.header = dom.header || document.querySelector('header');
     this.#initContainer();
   }
 
-  showMessage({
+  // ==========================================================================
+  // PUBLIC API — статус у хедері
+  // ==========================================================================
+  showUpdateStatus({
     text = '',
     textParts = null,
-    icon = 'ℹ️',
+    icon = 'ic_info',
+    url = null,
     type = 'info',
-    id = 'default',
-    closable = true
+    id = 'update-status'
   } = {}) {
     if (!this.#elements.header) return null;
-    let block = this.#elements.header.querySelector(`.message-block[data-id="${id}"]`);
+
+    const host = this.#elements.header.querySelector('.app-name') ?? this.#elements.header;
+    host.classList.add('flex-center', 'g-5');
+    let block = this.#findStatusBlock(id);
 
     if (block) {
-      this.#updateMessageBlock(block, { id, text, textParts, icon, type });
-      block.style.opacity = '1';
-      block.style.transform = 'translateY(0)';
+      this.#updateStatusBlock(block, { id, text, textParts, icon, url, type });
+      this.#revealStatusBlock(block);
       return block;
     }
 
-    block = this.#createMessageElement({ text, textParts, icon, type, id, closable });
-    this.#elements.header.prepend(block);
-
-    requestAnimationFrame(() => {
-      block.style.opacity = '1';
-      block.style.transform = 'translateY(0)';
-    });
-
+    block = this.#createStatusBlock({ text, textParts, icon, url, type, id, closable: false });
+    host.append(block);
+    requestAnimationFrame(() => this.#revealStatusBlock(block));
     return block;
   }
 
+  hideStatus(block) {
+    if (!block) return;
+
+    block.style.opacity = '0';
+    block.style.transform = 'translateY(-10px)';
+
+    block.addEventListener('transitionend', () => {
+      block.remove()
+      const host = this.#elements.header.querySelector('.app-name') ?? this.#elements.header;
+      host.classList.remove('flex-center', 'g-5');
+    }, { once: true });
+  }
+
+  clearStatuses() {
+    if (!this.#elements.header) return;
+    this.#elements.header
+      .querySelectorAll('.message-block')
+      .forEach(block => this.hideStatus(block));
+  }
+
+  // ==========================================================================
+  // PUBLIC API — toast
+  // ==========================================================================
   showToast({
     text = '',
     icon = 'ic_info',
@@ -100,25 +129,13 @@ export class MessageManager {
     }, { once: true });
   }
 
-  hide(block) {
-    if (!block) return;
-
-    block.style.opacity = '0';
-    block.style.transform = 'translateY(-10px)';
-
-    block.addEventListener('transitionend', () => block.remove(), { once: true });
-  }
-
   clearAllToasts() {
     this.#activeToasts.forEach((_, id) => this.hideToast(id));
   }
 
-  clearHeader() {
-    if (!this.#elements.header) return;
-    const blocks = this.#elements.header.querySelectorAll('.message-block');
-    blocks.forEach(block => this.hide(block));
-  }
-
+  // ==========================================================================
+  // PRIVATE — ініціалізація
+  // ==========================================================================
   #initContainer() {
     let container = document.querySelector('.validator-container');
     if (!container) {
@@ -129,83 +146,82 @@ export class MessageManager {
     this.#elements.container = container;
   }
 
-  #createMessageElement({ text, textParts, icon, type, id, closable }) {
-    const block = document.createElement('div');
-    block.className = 'message-block glass-panel';
+  // ==========================================================================
+  // PRIVATE — статус у хедері
+  // ==========================================================================
+  #findStatusBlock(id) {
+    return this.#elements.header.querySelector(`.message-block[data-id="${id}"]`);
+  }
+
+  #revealStatusBlock(block) {
+    block.style.opacity = '1';
+    block.style.transform = 'translateY(0)';
+  }
+
+  #createStatusBlock({ text, textParts, icon, type, url, id, closable }) {
+    const block = document.createElement('a');
+    block.href = url;
+    block.target = '_blank';
+
+    block.className = 'message-block p-0-5';
     block.dataset.id = id;
     block.style.cssText = 'opacity: 0; transform: translateY(-10px); transition: all 0.2s ease;';
 
     const item = document.createElement('div');
-    item.className = `message-item g-075 p-8`;
+    item.className = 'message-item g-5';
     item.dataset.type = type;
 
     const iconEl = document.createElement('span');
-    iconEl.className = 'message-icon';
-    iconEl.innerHTML = icon;
+    iconEl.className = `icon small ${icon}`;
 
     const content = document.createElement('div');
     content.className = 'message-content flex-between';
 
     const textEl = document.createElement('span');
-    textEl.className = 'message-text';
-    this.#setMessageText(textEl, text, textParts);
+    textEl.className = 'message-text t11_px';
+    this.#setStatusText(textEl, text, textParts);
     content.appendChild(textEl);
 
     item.append(iconEl, content);
 
     if (closable) {
-
-      const closeBtn = document.createElement('button');
-      const closeIcon = document.createElement('div');
-
-      closeBtn.className = 'btn app-btn glass-panel flex-center';
-      closeBtn.style.cssText = 'background: var(--accent-glass);';
-      closeBtn.append(closeIcon);
-
-      closeIcon.className = 'icon ic_cross';
-
-      closeBtn.addEventListener('click', () => this.hide(block), { once: true });
-      item.appendChild(closeBtn);
+      item.appendChild(this.#createCloseButton(block));
     }
 
     block.appendChild(item);
     return block;
   }
 
-  #createToastElement({ text, icon, type, id }) {
-    const toast = document.createElement('div');
-    toast.className = `toast-msg glass-panel g-8 flex-center`;
-    toast.dataset.type = type;
-    toast.dataset.id = id;
+  #createCloseButton(block) {
+    const closeBtn = document.createElement('button');
+    const closeIcon = document.createElement('div');
 
-    if (icon) {
-      const iconEl = document.createElement('span');
-      iconEl.className = `toast-icon ${icon}`;
-      toast.appendChild(iconEl);
-    }
+    closeBtn.className = 'btn app-btn small glass-panel flex-center';
+    closeBtn.style.cssText = 'background: var(--accent-glass);';
+    closeIcon.className = 'icon ic_cross';
+    closeBtn.append(closeIcon);
 
-    const textEl = document.createElement('span');
-    textEl.className = 'toast-text';
-    textEl.textContent = text;
-    toast.appendChild(textEl);
-
-    return toast;
+    closeBtn.addEventListener('click', () => this.hideStatus(block), { once: true });
+    return closeBtn;
   }
 
-  #updateMessageBlock(block, { id, text, textParts, icon, type }) {
+  #updateStatusBlock(block, { id, text, textParts, icon, url, type }) {
+    block.href = url;
+    block.target = '_blank';
+
     const item = block.querySelector('.message-item');
-    const iconEl = block.querySelector('.message-icon');
+    const iconEl = block.querySelector('.icon');
     const textEl = block.querySelector('.message-text');
 
     if (item) {
       item.dataset.id = id;
       item.dataset.type = type;
     }
-    if (iconEl) iconEl.innerHTML = icon;
-    if (textEl) this.#setMessageText(textEl, text, textParts);
+    if (iconEl) iconEl.className = `icon small ${icon}`;
+    if (textEl) this.#setStatusText(textEl, text, textParts);
   }
 
-  #setMessageText(element, text, textParts) {
+  #setStatusText(element, text, textParts) {
     element.replaceChildren();
 
     if (!textParts?.length) {
@@ -221,16 +237,39 @@ export class MessageManager {
     });
   }
 
+  // ==========================================================================
+  // PRIVATE — toast
+  // ==========================================================================
+  #createToastElement({ text, icon, type, id }) {
+    const toast = document.createElement('div');
+    toast.className = 'toast-msg glass-panel g-8 flex-center';
+    toast.dataset.type = type;
+    toast.dataset.id = id;
+
+    if (icon) {
+      const iconEl = document.createElement('span');
+      iconEl.className = `icon ${icon}`;
+      toast.appendChild(iconEl);
+    }
+
+    const textEl = document.createElement('span');
+    textEl.className = 'toast-text';
+    textEl.textContent = text;
+    toast.appendChild(textEl);
+
+    return toast;
+  }
+
   #updateToast(id, { text, icon, type, emotional }) {
     const { element } = this.#activeToasts.get(id);
-    const iconEl = element.querySelector('.toast-icon');
+    const iconEl = element.querySelector('.icon');
     const textEl = element.querySelector('.toast-text');
 
     if (element) {
       element.dataset.type = type;
       element.classList.add('show');
     }
-    if (iconEl) iconEl.classList.add(icon);
+    if (iconEl) iconEl.className = `icon ${icon}`;
     if (textEl) textEl.textContent = emotional ? this.#addEmotionalEnding(text) : text;
   }
 

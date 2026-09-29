@@ -233,12 +233,12 @@
   "versionStateCurrent": { "message": "The latest version is installed" },
   "versionStateAvailable": { "message": "Update found: {version}" },
   "versionStateUnknown": { "message": "Update status is unknown" },
-  "versionAvailableMessage": { "message": "Update available: " },
+  "versionAvailableMessage": { "message": "Update " },
   "versionRateLimit": {
     "message": "Too many GitHub requests. Try again in {minutes} min."
   },
   "versionCheckError": { "message": "Could not check for updates" },
-  "versionCheckErrorReason": { "message": "Update check failed: {reason}" },
+  "versionCheckErrorReason": { "message": "Failed: {reason}" },
   "updatedAt": { "message": "Updated at" },
   "updatedYesterdayAt": { "message": "Updated yesterday at" },
   "installDateUnknown": { "message": "Unknown" },
